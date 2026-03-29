@@ -6,7 +6,8 @@ export type Action =
   | "next"
   | "prev"
   | "switch_mode"
-  | "refresh";
+  | "refresh"
+  | "toggle_album_art";
 
 type ActionHandler = (action: Action) => void;
 
@@ -14,8 +15,7 @@ let _handler: ActionHandler | null = null;
 let _rawMode = false;
 
 /**
- * Enable raw key input and register an action handler.
- * Only one handler is active at a time.
+ * Enable raw key input and mouse reporting, register an action handler.
  */
 export function startInput(handler: ActionHandler): void {
   _handler = handler;
@@ -28,11 +28,17 @@ export function startInput(handler: ActionHandler): void {
     _rawMode = true;
   }
 
+  // Enable X10 mouse click reporting (button press only, no motion)
+  process.stdout.write("\x1b[?1000h");
+
   process.stdin.on("keypress", handleKeypress);
+  process.stdin.on("data", handleData);
 }
 
 export function stopInput(): void {
+  process.stdout.write("\x1b[?1000l"); // disable mouse reporting
   process.stdin.removeListener("keypress", handleKeypress);
+  process.stdin.removeListener("data", handleData);
   if (_rawMode && process.stdin.isTTY) {
     process.stdin.setRawMode(false);
     _rawMode = false;
@@ -46,30 +52,42 @@ function handleKeypress(
 ): void {
   if (!_handler) return;
 
-  // Ctrl-C
   if (key.ctrl && key.name === "c") {
     _handler("quit");
     return;
   }
 
   switch (key.name ?? _chunk) {
-    case "q":
-      _handler("quit");
-      break;
-    case "space":
-      _handler("toggle_play");
-      break;
-    case "n":
-      _handler("next");
-      break;
-    case "p":
-      _handler("prev");
-      break;
-    case "s":
-      _handler("switch_mode");
-      break;
-    case "r":
-      _handler("refresh");
-      break;
+    case "q":         _handler("quit");               break;
+    case "space":     _handler("toggle_play");         break;
+    case "n":         _handler("next");                break;
+    case "p":         _handler("prev");                break;
+    case "s":         _handler("switch_mode");         break;
+    case "r":         _handler("refresh");             break;
+    case "a":         _handler("toggle_album_art");    break;
+    case "escape":    _handler("toggle_album_art");    break;
+  }
+}
+
+/**
+ * Parse raw stdin bytes for ANSI mouse sequences.
+ * X10 format: ESC [ M <cb> <cx> <cy>
+ *   cb = button byte: cb & 3 === 0 → left button press
+ *   cx, cy = 1-based column and row (offset by 32)
+ */
+function handleData(data: Buffer): void {
+  if (!_handler) return;
+  if (data.length < 6) return;
+  if (data[0] !== 0x1b || data[1] !== 0x5b || data[2] !== 0x4d) return; // ESC [ M
+
+  const cb  = data[3] - 32;
+  const col = data[4] - 32 - 1; // convert to 0-based
+  const row = data[5] - 32 - 1; // convert to 0-based
+
+  const isLeftPress = (cb & 3) === 0;
+  const isHeaderRow = row === 0 || row === 1;
+
+  if (isLeftPress && isHeaderRow) {
+    _handler("toggle_album_art");
   }
 }
