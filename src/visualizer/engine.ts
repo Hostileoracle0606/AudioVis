@@ -28,6 +28,10 @@ import { startInput, stopInput } from "../ui/input.js";
 import type { Action } from "../ui/input.js";
 import * as spotify from "../spotify/client.js";
 import { onCleanup } from "../utils/cleanup.js";
+import { fetchImageBuffer } from "../album/fetcher.js";
+import { convertToAscii } from "../album/converter.js";
+import { getCached, setCached } from "../album/cache.js";
+import { renderAlbumArt } from "./modes/albumArt.js";
 
 export interface EngineOptions {
   mode: VisMode;
@@ -78,6 +82,11 @@ export class VisualizerEngine {
       this.state.cols = c;
       this.state.rows = r;
       this.state.scrollHistory = new Float32Array(c);
+      // Force art reconversion at new size on next poll
+      if (this.state.albumArt && this.state.albumArt.cols !== c) {
+        this.state.albumArtUrl = "";
+        this.state.albumArt = null;
+      }
     });
 
     // Wire audio frames into DSP pipeline
@@ -149,21 +158,56 @@ export class VisualizerEngine {
     try {
       const playback = await spotify.getCurrentPlayback();
       if (!playback || !playback.item) {
-        this.state.trackName = "";
-        this.state.artistName = "";
-        this.state.deviceName = playback?.device?.name ?? "";
-        this.state.isPlaying = false;
-        this.state.progressMs = 0;
-        this.state.durationMs = 0;
+        this.state.trackName   = "";
+        this.state.artistName  = "";
+        this.state.albumName   = "";
+        this.state.deviceName  = playback?.device?.name ?? "";
+        this.state.isPlaying   = false;
+        this.state.progressMs  = 0;
+        this.state.durationMs  = 0;
+        this.state.albumArtUrl = "";
+        this.state.albumArt    = null;
         return;
       }
 
-      this.state.trackName = playback.item.name;
+      this.state.trackName  = playback.item.name;
       this.state.artistName = playback.item.artists.map((a) => a.name).join(", ");
+      this.state.albumName  = playback.item.album.name;
       this.state.deviceName = playback.device?.name ?? "";
-      this.state.isPlaying = playback.is_playing;
+      this.state.isPlaying  = playback.is_playing;
       this.state.progressMs = playback.progress_ms ?? 0;
       this.state.durationMs = playback.item.duration_ms;
+
+      // Album art: use the smallest image (last in array, Spotify orders largest→smallest)
+      const images = playback.item.album.images;
+      const imageUrl = images.length > 0 ? images[images.length - 1].url : "";
+
+      if (imageUrl && imageUrl !== this.state.albumArtUrl) {
+        this.state.albumArtUrl = imageUrl;
+
+        const cached = getCached(playback.item.id);
+        if (cached && cached.cols === this.state.cols) {
+          this.state.albumArt = cached;
+        } else {
+          const trackId = playback.item.id;
+          const cols    = this.state.cols;
+          const noColor = this.opts.noColor;
+          const layout  = computeLayout(cols, this.state.rows);
+          const vizH    = layout.visualizer.height;
+
+          fetchImageBuffer(imageUrl)
+            .then((buf) => convertToAscii(buf, trackId, cols, vizH, noColor))
+            .then((art) => {
+              setCached(trackId, art);
+              if (this.state.albumArtUrl === imageUrl) {
+                this.state.albumArt = art;
+              }
+            })
+            .catch(() => {
+              // Network/decode failure — no art, no crash
+            });
+        }
+      }
     } catch {
       // Network or auth error — don't crash the visualizer
     }
@@ -195,19 +239,27 @@ export class VisualizerEngine {
     const DEVICE_PAD = deviceLabel.length + 1;
 
     if (hasTrack) {
+      // Thumbnail (4×2 icon) — left of track name
+      if (s.albumArt) {
+        this.renderer.write(0, 0, s.albumArt.thumbnail[0] ?? "    ");
+        this.renderer.write(0, 1, s.albumArt.thumbnail[1] ?? "    ");
+      } else {
+        this.renderer.write(0, 0, "    ");
+        this.renderer.write(0, 1, "    ");
+      }
+
       const titleFull = `${s.trackName}  —  ${s.artistName}`;
-      const maxTitleW = Math.max(1, cols - DEVICE_PAD - 1);
-      const titleLine =
-        "  " + truncateMiddle(titleFull, maxTitleW - 2);
-      this.renderer.write(0, 0, padRight(titleLine, cols - DEVICE_PAD));
+      const maxTitleW = Math.max(1, cols - DEVICE_PAD - 6);
+      const titleLine = "  " + truncateMiddle(titleFull, maxTitleW - 2);
+      this.renderer.write(5, 0, padRight(titleLine, cols - DEVICE_PAD - 5));
       this.renderer.write(cols - DEVICE_PAD, 0, padLeft(deviceLabel, DEVICE_PAD));
 
       const stateStr = s.isPlaying ? "Playing" : "Paused";
-      const elapsed = formatSeconds(s.progressMs / 1000);
-      const total = formatSeconds(s.durationMs / 1000);
+      const elapsed  = formatSeconds(s.progressMs / 1000);
+      const total    = formatSeconds(s.durationMs / 1000);
       const timePart = `${elapsed} / ${total}`;
       const stateLine = `  State: ${stateStr}`;
-      this.renderer.write(0, 1, padRight(stateLine, cols - timePart.length - 1));
+      this.renderer.write(5, 1, padRight(stateLine, cols - timePart.length - 6));
       this.renderer.write(cols - timePart.length, 1, timePart);
     } else {
       this.renderer.write(0, 0, "  Now playing: Nothing active");
@@ -227,13 +279,15 @@ export class VisualizerEngine {
       renderWavefield(s, this.renderer, layout.visualizer, this.theme);
     } else if (s.mode === "scroll") {
       renderScroll(s, this.renderer, layout.visualizer, this.theme);
+    } else if (s.mode === "album-art") {
+      renderAlbumArt(s, this.renderer, layout.visualizer, this.theme);
     } else {
       renderSpectrum(s, this.renderer, layout.visualizer, this.theme);
     }
 
     // --- Footer ---
     const footer =
-      "[space] play/pause   [n] next   [p] prev   [s] mode   [q] quit";
+      "[space] play/pause   [n] next   [p] prev   [s] mode   [a] art   [q] quit";
     this.renderer.writeCenter(layout.footer.y, footer);
 
     this.renderer.flush();
@@ -272,6 +326,16 @@ export class VisualizerEngine {
         }
         case "refresh":
           await this.pollSpotify();
+          break;
+        case "toggle_album_art":
+          if (this.state.mode !== "album-art") {
+            if (this.state.albumArt) {
+              this.state.priorMode = this.state.mode;
+              this.state.mode = "album-art";
+            }
+          } else {
+            this.state.mode = this.state.priorMode;
+          }
           break;
       }
     } catch (err) {
