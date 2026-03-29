@@ -319,6 +319,7 @@ export class VisualizerEngine {
           await this.pollSpotify();
           break;
         case "switch_mode": {
+          if (this.state.mode === "album-art") break;
           const modes = ["wavefield", "scroll", "spectrum"] as const;
           const idx = modes.indexOf(this.state.mode as typeof modes[number]);
           this.state.mode = modes[(idx + 1) % modes.length];
