@@ -1,4 +1,6 @@
-export type VisMode = "wavefield" | "scroll" | "spectrum";
+import type { AsciiArt } from "../album/converter.js";
+
+export type VisMode = "wavefield" | "scroll" | "spectrum" | "album-art";
 
 export interface VisState {
   mode: VisMode;
@@ -15,22 +17,28 @@ export interface VisState {
   // Spotify metadata
   trackName: string;
   artistName: string;
+  albumName: string;
   deviceName: string;
   isPlaying: boolean;
   progressMs: number;
   durationMs: number;
+
+  // Album art
+  albumArt: AsciiArt | null;
+  albumArtUrl: string;
+  priorMode: VisMode;
 
   // Terminal dimensions
   cols: number;
   rows: number;
 
   // Time (for animation phases)
-  startTime: number;  // Date.now() at engine start
+  startTime: number;
 
   // Number of visual buckets / bars
   numBars: number;
 
-  // Ring buffer for scroll mode — one amplitude value per visible column
+  // Ring buffer for scroll mode
   scrollHistory: Float32Array;
 }
 
@@ -52,10 +60,15 @@ export function createInitialState(
 
     trackName: "",
     artistName: "",
+    albumName: "",
     deviceName: "",
     isPlaying: false,
     progressMs: 0,
     durationMs: 0,
+
+    albumArt: null,
+    albumArtUrl: "",
+    priorMode: mode,
 
     cols,
     rows,
