@@ -1,0 +1,5 @@
+{"type":"server-started","port":62266,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:62266","screen_dir":"/Users/trinabgoswamy/Audio-vis/.superpowers/brainstorm/4438-1774807618/content","state_dir":"/Users/trinabgoswamy/Audio-vis/.superpowers/brainstorm/4438-1774807618/state"}
+{"type":"screen-added","file":"/Users/trinabgoswamy/Audio-vis/.superpowers/brainstorm/4438-1774807618/content/header-icon-layout.html"}
+{"type":"screen-added","file":"/Users/trinabgoswamy/Audio-vis/.superpowers/brainstorm/4438-1774807618/content/expanded-now-playing.html"}
+{"type":"screen-added","file":"/Users/trinabgoswamy/Audio-vis/.superpowers/brainstorm/4438-1774807618/content/approaches.html"}
+{"type":"server-stopped","reason":"idle timeout"}

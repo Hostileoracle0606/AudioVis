@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASCII Album Art — Layout Options</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0a0a0f;
+    color: #c8c8d0;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    padding: 32px;
+    min-height: 100vh;
+  }
+  h1 { color: #a0c8ff; font-size: 18px; margin-bottom: 6px; letter-spacing: 0.04em; }
+  .subtitle { color: #5a6a7a; font-size: 13px; margin-bottom: 32px; }
+
+  .options-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 40px;
+  }
+
+  .option-card {
+    border: 1px solid #2a2a3a;
+    border-radius: 10px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    background: #0f0f1a;
+  }
+  .option-card:hover { border-color: #4a5a7a; box-shadow: 0 0 0 1px #1e2a3a; }
+  .option-card.selected { border-color: #5580cc; box-shadow: 0 0 0 2px #3060aa44; }
+
+  .card-label {
+    background: #161625;
+    padding: 10px 16px;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: #5a6a9a;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-label .badge {
+    background: #2a3555;
+    color: #88aaff;
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  /* Terminal mockup */
+  .terminal {
+    background: #050508;
+    padding: 12px 0 0 0;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .term-bar {
+    background: #111118;
+    display: flex;
+    gap: 6px;
+    padding: 6px 12px;
+    margin-bottom: 2px;
+    align-items: center;
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot.r { background: #3a1a1a; }
+  .dot.y { background: #3a3510; }
+  .dot.g { background: #1a3a1a; }
+
+  .tline {
+    padding: 0 14px;
+    white-space: pre;
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  /* Color tokens */
+  .c-track { color: #e8e8f8; }
+  .c-artist { color: #9090b8; }
+  .c-device { color: #485870; }
+  .c-state { color: #5888c8; }
+  .c-time { color: #6a7a8a; }
+  .c-progress { color: #4472bb; }
+  .c-footer { color: #3a4050; }
+  .c-vis { color: #1e3055; }
+  .c-vis-hi { color: #3060aa; }
+  .c-vis-peak { color: #88aaff; }
+  .c-sep { color: #1a2030; }
+  .c-ascii { color: #8890a8; }
+  .c-ascii-hi { color: #b8c8e8; }
+  .c-plasma { color: #2a1840; }
+  .c-plasma-hi { color: #7a40cc; }
+  .c-plasma-mid { color: #4a28a0; }
+
+  .c-highlight-box {
+    background: #1a2a4a22;
+    border: 1px solid #3a5a9a44;
+    border-radius: 3px;
+    display: inline;
+  }
+
+  .divider { border: none; border-top: 1px solid #1a1a28; margin: 8px 14px; }
+
+  /* Expanded view section */
+  .expanded-section {
+    margin-top: 40px;
+  }
+  .expanded-section h2 {
+    color: #a0c8ff;
+    font-size: 15px;
+    margin-bottom: 6px;
+    letter-spacing: 0.04em;
+  }
+  .expanded-section .subtitle2 {
+    color: #5a6a7a;
+    font-size: 12px;
+    margin-bottom: 20px;
+  }
+
+  .expanded-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  .note {
+    margin-top: 20px;
+    padding: 12px 16px;
+    background: #0f1825;
+    border-left: 3px solid #3a5a9a;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #7a8a9a;
+    line-height: 1.6;
+  }
+  .note strong { color: #9ab8d8; }
+
+  .trigger-note {
+    margin-top: 12px;
+    font-size: 11px;
+    color: #4a5a6a;
+    text-align: center;
+    letter-spacing: 0.05em;
+  }
+</style>
+<script>
+function toggleSelect(card) {
+  const group = card.closest('[data-group]');
+  if (!group) {
+    card.classList.toggle('selected');
+    return;
+  }
+  group.querySelectorAll('.option-card').forEach(c => c.classList.remove('selected'));
+  card.classList.add('selected');
+  const choice = card.dataset.choice;
+  const text = card.querySelector('.card-label')?.textContent?.trim() || choice;
+  if (window.sendSelection) window.sendSelection(choice, text);
+}
+</script>
+</head>
+<body>
+
+<h1>ASCII Album Art — Wireframes</h1>
+<p class="subtitle">Two decisions: (1) how the mini-icon sits in the header, (2) what the expanded view looks like. Pick one from each section.</p>
+
+<!-- ── SECTION 1: HEADER ICON PLACEMENT ── -->
+<h2 style="color:#6a8ab8;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:16px;margin-top:8px;">Part 1 — Mini icon placement in header</h2>
+
+<div class="options-grid" data-group="header">
+
+  <!-- OPTION A: Left-side icon block -->
+  <div class="option-card" data-choice="header-a" onclick="toggleSelect(this)">
+    <div class="card-label">
+      <span class="badge">A</span>
+      Icon block on the left, text indented
+    </div>
+    <div class="terminal">
+      <div class="term-bar"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div></div>
+      <!-- Header row 0 -->
+      <div class="tline"><span class="c-ascii-hi">▓░▒</span><span class="c-ascii">░</span>  <span class="c-track">Bohemian Rhapsody</span><span class="c-sep">  —  </span><span class="c-artist">Queen</span><span style="color:#2a3545">                     </span><span class="c-device">[Macbook Pro]</span></div>
+      <!-- Header row 1 -->
+      <div class="tline"><span class="c-ascii">▒░▓</span><span class="c-ascii-hi">▒</span>  <span class="c-state">Playing</span><span style="color:#3a4a5a">                                        </span><span class="c-time">3:21 / 5:55</span></div>
+      <!-- Progress -->
+      <div class="tline"><span style="color:#1a1a25">    </span><span class="c-progress">━━━━━━━━━━━━━━━━━━━━━</span><span style="color:#2a3040">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span></div>
+      <div class="tline"><span class="c-sep">                                                                </span></div>
+      <!-- Viz rows (abbreviated) -->
+      <div class="tline"><span class="c-vis-peak">    ██  </span><span class="c-vis-hi"> ████ </span><span class="c-vis">  ██  ██  ██  ██  ██  ██  ██  ██  ██  ██  </span></div>
+      <div class="tline"><span class="c-vis-hi">   ████ </span><span class="c-vis-peak">██████</span><span class="c-vis"> ████ ██ ███ ██ ████ ██ ███ ██ ████ ██  </span></div>
+      <div class="tline"><span class="c-vis"> ██████ ████████████████████████████████████████████████ </span></div>
+      <div class="tline"><span class="c-vis"> ██████████████████████████████████████████████████████ </span></div>
+      <div class="tline"><span class="c-sep">                                                                </span></div>
+      <!-- Footer -->
+      <div class="tline" style="padding-bottom:10px"><span class="c-footer">[space] play/pause   [n] next   [p] prev   [s] mode  </span><span style="color:#4a5a6a;font-weight:bold">[a] album art</span><span class="c-footer">   [q] quit</span></div>
+    </div>
+    <div style="padding:10px 16px 12px;font-size:11px;color:#5a6a7a;line-height:1.5;">
+      4-char × 2-row icon pressed flush to the left margin. Track name is nudged right. Clean separation — art never collides with text.
+    </div>
+  </div>
+
+  <!-- OPTION B: Inline icon before track name -->
+  <div class="option-card" data-choice="header-b" onclick="toggleSelect(this)">
+    <div class="card-label">
+      <span class="badge">B</span>
+      Inline icon, same line as track name
+    </div>
+    <div class="terminal">
+      <div class="term-bar"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div></div>
+      <div class="tline">  <span class="c-ascii-hi">▓▒</span> <span class="c-track">Bohemian Rhapsody</span><span class="c-sep">  —  </span><span class="c-artist">Queen</span><span style="color:#2a3545">                    </span><span class="c-device">[Macbook Pro]</span></div>
+      <div class="tline">  <span class="c-ascii">░▒</span> <span class="c-state">Playing</span><span style="color:#3a4a5a">                                        </span><span class="c-time">3:21 / 5:55</span></div>
+      <div class="tline">     <span class="c-progress">━━━━━━━━━━━━━━━━━━━━━</span><span style="color:#2a3040">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span></div>
+      <div class="tline"><span class="c-sep">                                                                </span></div>
+      <div class="tline"><span class="c-vis-peak">    ██  </span><span class="c-vis-hi"> ████ </span><span class="c-vis">  ██  ██  ██  ██  ██  ██  ██  ██  ██  ██  </span></div>
+      <div class="tline"><span class="c-vis-hi">   ████ </span><span class="c-vis-peak">██████</span><span class="c-vis"> ████ ██ ███ ██ ████ ██ ███ ██ ████ ██  </span></div>
+      <div class="tline"><span class="c-vis"> ██████ ████████████████████████████████████████████████ </span></div>
+      <div class="tline"><span class="c-vis"> ██████████████████████████████████████████████████████ </span></div>
+      <div class="tline"><span class="c-sep">                                                                </span></div>
+      <div class="tline" style="padding-bottom:10px"><span class="c-footer">[space] play/pause   [n] next   [p] prev   [s] mode  </span><span style="color:#4a5a6a;font-weight:bold">[a] album art</span><span class="c-footer">   [q] quit</span></div>
+    </div>
+    <div style="padding:10px 16px 12px;font-size:11px;color:#5a6a7a;line-height:1.5;">
+      2-char wide icon sits immediately before the track name on each of the 2 header rows. Tighter, more inline — feels like a prefix glyph.
+    </div>
+  </div>
+
+</div>
+
+<!-- ── SECTION 2: EXPANDED VIEW ── -->
+<div class="expanded-section">
+  <h2>Part 2 — Expanded album art view (press <span style="color:#8899bb">[a]</span>)</h2>
+  <p class="subtitle2">Triggered by a keypress. Takes over the visualizer region while header/footer remain.</p>
+
+  <div class="expanded-cards" data-group="expanded">
+
+    <!-- OPTION C: Centered ASCII art, plasma behind -->
+    <div class="option-card" data-choice="expanded-c" onclick="toggleSelect(this)">
+      <div class="card-label">
+        <span class="badge">C</span>
+        Centered art + animated plasma fill
+      </div>
+      <div class="terminal">
+        <div class="term-bar"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div></div>
+        <div class="tline"><span class="c-ascii-hi">▓░▒</span><span class="c-ascii">░</span>  <span class="c-track">Bohemian Rhapsody</span><span class="c-sep">  —  </span><span class="c-artist">Queen</span><span style="color:#2a3545">                     </span><span class="c-device">[Macbook Pro]</span></div>
+        <div class="tline"><span class="c-ascii">▒░▓</span><span class="c-ascii-hi">▒</span>  <span class="c-state">Playing</span><span style="color:#3a4a5a">                                        </span><span class="c-time">3:21 / 5:55</span></div>
+        <div class="tline">    <span class="c-progress">━━━━━━━━━━━━━━━━━━━━━</span><span style="color:#2a3040">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span></div>
+        <div class="tline"><span class="c-sep">                                                                </span></div>
+        <!-- plasma background with centered ASCII art block -->
+        <div class="tline"><span class="c-plasma">▓▒░▒▓▒░▓▒▒░▓▒</span><span class="c-ascii-hi">┌──────────────────────┐</span><span class="c-plasma">▒░▓▒░▒▓░▒▒░▓▒░▒▓░▒</span></div>
+        <div class="tline"><span class="c-plasma-mid">░▓▒▒░▒▓░▒▓░▒▓</span><span class="c-ascii-hi">│</span><span class="c-ascii"> ▓▓▓▓▒▒░░▒▒▓▓▓▓▓▓▒▒ </span><span class="c-ascii-hi">│</span><span class="c-plasma-mid">░▒▒▓▒░▒▓▒░▒▒▓▒░░▒▓▒</span></div>
+        <div class="tline"><span class="c-plasma-hi">▒░▒▓▒▓░▒▒▓▒░▒</span><span class="c-ascii-hi">│</span><span class="c-ascii"> ▒▓▓▓▓▓▓▒░░▓▓▓▓▓▒▒▓ </span><span class="c-ascii-hi">│</span><span class="c-plasma-hi">▓▒░▒▓▒░▒▓▒▒░▓▒▒▓░▒▒</span></div>
+        <div class="tline"><span class="c-plasma">▓░▒▓░▒▓▒░▒▒▓▒</span><span class="c-ascii-hi">│</span><span class="c-ascii"> ▓▓░░▒▓▓▓▓▓▒░░▒▒▒▓▓ </span><span class="c-ascii-hi">│</span><span class="c-plasma">▒▒░▒▓▒▓░▒▓▒▒░▒▓▒░▒▓</span></div>
+        <div class="tline"><span class="c-plasma-mid">░▒▓░▒▒▓▒░▓░▒▓</span><span class="c-ascii-hi">│</span><span class="c-ascii-hi"> ░░▒▒▒▓▓▓▓▒░░░▒▒▓▓▓ </span><span class="c-ascii-hi">│</span><span class="c-plasma-mid">░▒▓▒░▓▒▒░▓▒░▒▓░▒▒▓▒</span></div>
+        <div class="tline"><span class="c-plasma-hi">▒▓░▒▒▓▒░▒▓░▒▒</span><span class="c-ascii-hi">└──────────────────────┘</span><span class="c-plasma-hi">▒░▒▓▒░▒▓▒▒░▓▒░░▒▓▒▒</span></div>
+        <div class="tline"><span class="c-plasma">▓▒▒░▓▒░▒▓░▒▒▓▒░▒▒▓▒░▓▒░▒▓▒▒░▓▒░▒▒▓▒░▒▓░▒▒▓▒░▒▓▒░▓▒░▒▒▓▒░▒▓</span></div>
+        <div class="tline"><span class="c-sep">                                                                </span></div>
+        <div class="tline" style="padding-bottom:10px"><span class="c-footer">[space] play/pause   [n] next   [p] prev   [s] mode  </span><span style="color:#4a5a6a;font-weight:bold">[a] close</span><span class="c-footer">   [q] quit</span></div>
+      </div>
+      <div style="padding:10px 16px 12px;font-size:11px;color:#5a6a7a;line-height:1.5;">
+        Plasma noise fills the visualizer region. ASCII art is centered inside a box drawn over it. Plasma animates in sync with audio energy (pulse / bass).
+      </div>
+    </div>
+
+    <!-- OPTION D: Full-region ASCII art, plasma as background tint -->
+    <div class="option-card" data-choice="expanded-d" onclick="toggleSelect(this)">
+      <div class="card-label">
+        <span class="badge">D</span>
+        Full-bleed ASCII art, plasma as color tint
+      </div>
+      <div class="terminal">
+        <div class="term-bar"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div></div>
+        <div class="tline"><span class="c-ascii-hi">▓░▒</span><span class="c-ascii">░</span>  <span class="c-track">Bohemian Rhapsody</span><span class="c-sep">  —  </span><span class="c-artist">Queen</span><span style="color:#2a3545">                     </span><span class="c-device">[Macbook Pro]</span></div>
+        <div class="tline"><span class="c-ascii">▒░▓</span><span class="c-ascii-hi">▒</span>  <span class="c-state">Playing</span><span style="color:#3a4a5a">                                        </span><span class="c-time">3:21 / 5:55</span></div>
+        <div class="tline">    <span class="c-progress">━━━━━━━━━━━━━━━━━━━━━</span><span style="color:#2a3040">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span></div>
+        <div class="tline"><span class="c-sep">                                                                </span></div>
+        <!-- Full bleed ASCII — plasma coloring shifts each row's color -->
+        <div class="tline" style="color:#7040b8"> ░░░▒▒▒▒▓▓▓▓▓▓▓▒▒▒▒▒░░░░▒▒▒▒▓▓▓▓▒▒▒░░░░▒▒▒▒▓▓▓▓▓▒▒░░░░▒▒▒ </div>
+        <div class="tline" style="color:#8850cc"> ▒▒▓▓▓▓▓▓▓▓░░░░░░░▓▓▓▓▓▓▒▒▒░░░░▒▒▒▓▓▓▓▒▒▒░░░░░░▒▒▒▓▓▓▓▒▒▓ </div>
+        <div class="tline" style="color:#9060e0"> ▓▓▓▓▓▒░░░▒▒▓▓▓▓▓▓▓▓▒░░░░░▒▒▒▓▓▓▓▓▒▒░░░░▒▒▒▓▓▓▓▓▓▒▒░░░▒▒▓ </div>
+        <div class="tline" style="color:#a070f0"> ▓▒▒░░░▒▒▒▒▒▒░░░░▒▒▓▓▓▓▓▓▓▓▒▒▒░░░░▒▒▒▓▓▓▓▓▒▒▒░░░▒▒▒▓▓▓▓▓▓ </div>
+        <div class="tline" style="color:#b888ff"> ░░▒▒▒▓▓▓▓▓▓▓▒▒░░░░░░▒▒▒▒▒▓▓▓▓▓▒▒▒░░░░░▒▒▒▓▓▓▓▓▒▒▒░░░▒▒▒▓ </div>
+        <div class="tline" style="color:#9868e8"> ▒▓▓▓▓▓▓▓▓▒▒░░░▒▒▒▒▓▓▓▓▓▓▒▒░░░░▒▒▒▒▓▓▓▓▒▒▒░░░░░▒▒▒▒▓▓▓▓▒▒ </div>
+        <div class="tline" style="color:#7848c0"> ▓░░░░▒▒▒▒▒▓▓▓▓▓▓▓▓▒▒▒░░░░░▒▒▒▒▓▓▓▓▒▒▒▒░░░░▒▒▒▒▓▓▓▓▒▒░░░░ </div>
+        <div class="tline"><span class="c-sep">                                                                </span></div>
+        <div class="tline" style="padding-bottom:10px"><span class="c-footer">[space] play/pause   [n] next   [p] prev   [s] mode  </span><span style="color:#4a5a6a;font-weight:bold">[a] close</span><span class="c-footer">   [q] quit</span></div>
+      </div>
+      <div style="padding:10px 16px 12px;font-size:11px;color:#5a6a7a;line-height:1.5;">
+        ASCII art chars fill the entire visualizer region (no border box). Each row's ANSI color is the plasma color — art and plasma are the same layer. More immersive, less structured.
+      </div>
+    </div>
+
+  </div>
+
+  <div class="note">
+    <strong>Key binding:</strong> <code style="background:#0a1520;padding:1px 5px;border-radius:3px">[a]</code> toggles between visualizer and album art overlay. The header, progress bar, and footer stay visible in both states. The mini icon in the header is always present regardless of which header style (A or B) is chosen.
+  </div>
+  <div class="trigger-note" style="margin-top:16px;">Click an option in each section to select it, then describe what you like or want changed in the terminal.</div>
+</div>
+
+</body>
+</html>

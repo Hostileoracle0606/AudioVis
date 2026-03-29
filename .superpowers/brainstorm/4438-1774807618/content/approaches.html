@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Implementation Approaches</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #080810;
+    color: #c8c8d0;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    padding: 32px;
+    min-height: 100vh;
+  }
+  h1 { color: #a0c8ff; font-size: 17px; margin-bottom: 5px; letter-spacing: 0.04em; }
+  .subtitle { color: #5a6a7a; font-size: 12px; margin-bottom: 28px; }
+
+  .approaches { display: flex; flex-direction: column; gap: 20px; max-width: 820px; }
+
+  .approach {
+    border: 1px solid #1e2030;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #0c0c18;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .approach:hover { border-color: #3a4a6a; }
+  .approach.selected { border-color: #5580cc; box-shadow: 0 0 0 2px #3060aa33; }
+  .approach.recommended { border-color: #2a5a40; }
+  .approach.recommended:hover { border-color: #3a7a55; }
+  .approach.recommended.selected { border-color: #40aa70; box-shadow: 0 0 0 2px #20804033; }
+
+  .approach-header {
+    padding: 12px 18px;
+    background: #101020;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid #1a1a28;
+  }
+  .approach.recommended .approach-header { background: #0c1a14; border-bottom-color: #1a2a20; }
+
+  .badge {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+    flex-shrink: 0;
+    background: #1e2840; color: #6080b0;
+  }
+  .approach.recommended .badge { background: #142a1e; color: #40a060; }
+
+  .approach-title { font-size: 13px; color: #c0d0e8; font-weight: 600; flex: 1; }
+  .approach.recommended .approach-title { color: #80d0a8; }
+
+  .rec-tag {
+    font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+    background: #1a3a28; color: #40a060; padding: 3px 8px; border-radius: 10px;
+  }
+
+  .approach-body { padding: 16px 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  .col-label { font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: #3a4a6a; margin-bottom: 7px; }
+  .approach.recommended .col-label { color: #2a4a38; }
+
+  ul { list-style: none; padding: 0; }
+  ul li { font-size: 11.5px; line-height: 1.65; color: #6a7a8a; padding-left: 14px; position: relative; }
+  ul li::before { content: '·'; position: absolute; left: 4px; color: #3a4a6a; }
+  .pros li::before { color: #3a6a50; }
+  .cons li::before { color: #6a3a3a; }
+  .pros li { color: #7aaa90; }
+  .cons li { color: #aa7a7a; }
+
+  .tech-stack {
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: #090912;
+    border-radius: 6px;
+    font-size: 11px;
+    color: #4a5a6a;
+    line-height: 1.7;
+    border: 1px solid #161625;
+  }
+  .approach.recommended .tech-stack { background: #080f0c; border-color: #142018; }
+
+  code {
+    background: #0f1825;
+    color: #7a9ab8;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 10.5px;
+  }
+  .approach.recommended code { background: #0a1a12; color: #60a878; }
+
+  .pipeline-diagram {
+    margin-top: 12px;
+    padding: 10px 14px;
+    font-size: 10.5px;
+    color: #3a5060;
+    line-height: 1.8;
+    letter-spacing: 0.03em;
+  }
+
+  .section-note {
+    max-width: 820px;
+    margin-top: 24px;
+    padding: 12px 16px;
+    background: #0a1020;
+    border-left: 3px solid #2a4060;
+    border-radius: 4px;
+    font-size: 11.5px;
+    color: #5a7090;
+    line-height: 1.65;
+  }
+  .section-note strong { color: #7a9ab8; }
+
+  .pipeline {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    font-size: 10.5px; color: #3a5a70; margin-top: 10px;
+  }
+  .pipe-step {
+    background: #0f1a25; border: 1px solid #1e2e3e;
+    padding: 3px 8px; border-radius: 4px; color: #5a8aaa;
+  }
+  .approach.recommended .pipe-step { background: #0a1510; border-color: #1a2e20; color: #50906a; }
+  .pipe-arrow { color: #2a3a4a; }
+</style>
+<script>
+function pick(el) {
+  document.querySelectorAll('.approach').forEach(a => a.classList.remove('selected'));
+  el.classList.add('selected');
+  const choice = el.dataset.choice;
+  if (window.sendSelection) window.sendSelection(choice, el.querySelector('.approach-title').textContent);
+}
+</script>
+</head>
+<body>
+
+<h1>Three Implementation Approaches</h1>
+<p class="subtitle">All three cover the same four concerns: image fetching, pixel→ASCII conversion, terminal mouse events, and the overlay render mode.</p>
+
+<div class="approaches">
+
+  <!-- ── APPROACH 1 ── -->
+  <div class="approach" data-choice="approach-a" onclick="pick(this)">
+    <div class="approach-header">
+      <div class="badge">A</div>
+      <div class="approach-title">jimp (pure-JS) + ANSI mouse events</div>
+    </div>
+    <div class="approach-body">
+      <div>
+        <div class="col-label">Pros</div>
+        <ul class="pros">
+          <li>jimp is pure JS — no native compilation, matches project philosophy</li>
+          <li>JPEG + PNG decoding built-in; resize to target cols × rows before converting</li>
+          <li>ANSI mouse protocol (<code>\x1b[?1000h</code>) is already supported by most terminals and slots cleanly next to the existing raw-mode input</li>
+          <li>ASCII palette + per-char ANSI 256 color from each pixel's RGB — one pass</li>
+        </ul>
+      </div>
+      <div>
+        <div class="col-label">Cons</div>
+        <ul class="cons">
+          <li>jimp adds ~2 MB to node_modules</li>
+          <li>First conversion takes ~100–200 ms (acceptable; cached after that)</li>
+          <li>Mouse click coordinates are in character-cell units — requires mapping row/col back to the header region</li>
+        </ul>
+      </div>
+    </div>
+    <div style="padding:0 18px 14px;">
+      <div class="pipeline">
+        <span class="pipe-step">Spotify API → album.images[0].url</span>
+        <span class="pipe-arrow">→</span>
+        <span class="pipe-step">axios fetch (buffer)</span>
+        <span class="pipe-arrow">→</span>
+        <span class="pipe-step">jimp.read()</span>
+        <span class="pipe-arrow">→</span>
+        <span class="pipe-step">resize to (W/2 × vizH)</span>
+        <span class="pipe-arrow">→</span>
+        <span class="pipe-step">pixel → ASCII + ANSI color</span>
+        <span class="pipe-arrow">→</span>
+        <span class="pipe-step">cache string[]</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── APPROACH 2 (recommended) ── -->
+  <div class="approach recommended" data-choice="approach-b" onclick="pick(this)">
+    <div class="approach-header">
+      <div class="badge">B</div>
+      <div class="approach-title">sharp (native) + ANSI mouse events</div>
+      <span class="rec-tag">not recommended</span>
+    </div>
+    <div class="approach-body">
+      <div>
+        <div class="col-label">Pros</div>
+        <ul class="pros">
+          <li>sharp is extremely fast (libvips under the hood)</li>
+          <li>Sub-5ms resize + raw pixel buffer extraction</li>
+          <li>Best image quality at small sizes</li>
+        </ul>
+      </div>
+      <div>
+        <div class="col-label">Cons</div>
+        <ul class="cons">
+          <li>Native module — requires node-gyp, platform-specific binaries</li>
+          <li>Directly contradicts the project's no-native-modules rule</li>
+          <li>Complicates CI, cross-platform builds, and fresh installs</li>
+        </ul>
+      </div>
+    </div>
+    <div style="padding:0 18px 14px;font-size:11px;color:#5a3a3a;line-height:1.5;">
+      Ruled out: native compilation breaks the project's core constraint. Listed for completeness.
+    </div>
+  </div>
+
+  <!-- ── APPROACH 3 (actual recommendation) ── -->
+  <div class="approach recommended" data-choice="approach-c" onclick="pick(this)">
+    <div class="approach-header">
+      <div class="badge">C</div>
+      <div class="approach-title">jimp + ANSI mouse + plasma overlay reuse</div>
+      <span class="rec-tag">★ recommended</span>
+    </div>
+    <div class="approach-body">
+      <div>
+        <div class="col-label">What's different from A</div>
+        <ul class="pros">
+          <li>Same jimp pipeline — but the plasma layer reuses the existing wavefield renderer running at reduced amplitude, not a separate noise generator</li>
+          <li>The expanded view is a new <code>VisMode</code> (<code>"album-art"</code>) — engine's <code>renderFrame()</code> dispatches to it the same way it dispatches to spectrum/wavefield</li>
+          <li>Mini header icon is pre-converted to a fixed 4×2 char thumbnail once and stored alongside the full-size cache</li>
+          <li>Mouse click maps to the header region bounds from <code>computeLayout()</code> — reuses existing layout system</li>
+        </ul>
+      </div>
+      <div>
+        <div class="col-label">New modules</div>
+        <ul>
+          <li><code>album/fetcher.ts</code> — fetch image buffer from URL</li>
+          <li><code>album/converter.ts</code> — jimp pixel→ASCII, outputs <code>AsciiArt</code> object (thumbnail + full)</li>
+          <li><code>album/cache.ts</code> — keyed by track ID, LRU size 3</li>
+          <li><code>visualizer/modes/albumArt.ts</code> — render the overlay mode</li>
+          <li>Extend <code>ui/input.ts</code> — add mouse event parsing alongside existing keypress handling</li>
+        </ul>
+      </div>
+    </div>
+    <div style="padding:0 18px 14px;">
+      <div class="pipeline">
+        <span class="pipe-step">pollSpotify() gets imageUrl</span>
+        <span class="pipe-arrow">→</span>
+        <span class="pipe-step">cache miss? fetch + convert</span>
+        <span class="pipe-arrow">→</span>
+        <span class="pipe-step">store AsciiArt in cache</span>
+        <span class="pipe-arrow">→</span>
+        <span class="pipe-step">header icon written each frame</span>
+        <span class="pipe-arrow">→</span>
+        <span class="pipe-step">mouse click on header rows 0–1</span>
+        <span class="pipe-arrow">→</span>
+        <span class="pipe-step">mode = "album-art"</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="section-note">
+  <strong>Recommendation: Approach C.</strong> It extends the existing architecture cleanly — new render mode, new album module, minimal changes to the engine. The plasma background comes for free by running the wavefield renderer at low amplitude behind the overlay. No new architectural patterns needed.
+</div>
+
+</body>
+</html>

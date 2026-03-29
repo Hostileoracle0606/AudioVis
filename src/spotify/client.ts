@@ -1,0 +1,152 @@
+import axios, { AxiosError } from "axios";
+import { loadTokens, saveTokens } from "./tokenStore.js";
+import { refreshAccessToken } from "./auth.js";
+import type { SpotifyDevice, SpotifyPlaybackState } from "./types.js";
+
+const BASE = "https://api.spotify.com/v1";
+
+export async function getAccessToken(): Promise<string> {
+  const tokens = loadTokens();
+  if (!tokens) {
+    throw new Error(
+      'Not authenticated. Run "myviz spotify login" first.'
+    );
+  }
+
+  // Refresh if expiring within 30 seconds.
+  if (Date.now() >= tokens.expires_at - 30_000) {
+    const refreshed = await refreshAccessToken(tokens.refresh_token);
+    saveTokens(refreshed);
+    return refreshed.access_token;
+  }
+
+  return tokens.access_token;
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+async function apiGet<T>(path: string): Promise<T | null> {
+  const token = await getAccessToken();
+  try {
+    const res = await axios.get<T>(`${BASE}${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.data;
+  } catch (err) {
+    const ae = err as AxiosError;
+    if (ae.response?.status === 204 || ae.response?.status === 404) return null;
+    if (ae.response?.status === 401) {
+      // Token refresh is handled by getAccessToken() on the next call.
+      return null;
+    }
+    throw err;
+  }
+}
+
+async function apiPut(path: string, body?: unknown): Promise<void> {
+  const token = await getAccessToken();
+  try {
+    await axios.put(`${BASE}${path}`, body ?? null, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+  } catch (err) {
+    const ae = err as AxiosError;
+    // 204 = success, no content
+    if (ae.response?.status === 204) return;
+    if (ae.response?.status === 403) {
+      // Premium required
+      throw new Error(
+        "Spotify Premium is required for playback control."
+      );
+    }
+    if (ae.response?.status === 404) {
+      throw new Error(
+        "No active Spotify device found. Start Spotify on a device first."
+      );
+    }
+    throw err;
+  }
+}
+
+async function apiPost(path: string, body?: unknown): Promise<void> {
+  const token = await getAccessToken();
+  try {
+    await axios.post(`${BASE}${path}`, body ?? null, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+  } catch (err) {
+    const ae = err as AxiosError;
+    if (ae.response?.status === 204) return;
+    if (ae.response?.status === 404) {
+      throw new Error(
+        "No active Spotify device found. Start Spotify on a device first."
+      );
+    }
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+export async function getCurrentPlayback(): Promise<SpotifyPlaybackState | null> {
+  return apiGet<SpotifyPlaybackState>("/me/player");
+}
+
+export async function getDevices(): Promise<SpotifyDevice[]> {
+  interface DevicesResponse {
+    devices: SpotifyDevice[];
+  }
+  const res = await apiGet<DevicesResponse>("/me/player/devices");
+  return res?.devices ?? [];
+}
+
+export async function play(deviceId?: string): Promise<void> {
+  const query = deviceId ? `?device_id=${deviceId}` : "";
+  await apiPut(`/me/player/play${query}`);
+}
+
+export async function pause(deviceId?: string): Promise<void> {
+  const query = deviceId ? `?device_id=${deviceId}` : "";
+  await apiPut(`/me/player/pause${query}`);
+}
+
+export async function nextTrack(deviceId?: string): Promise<void> {
+  const query = deviceId ? `?device_id=${deviceId}` : "";
+  await apiPost(`/me/player/next${query}`);
+}
+
+export async function previousTrack(deviceId?: string): Promise<void> {
+  const query = deviceId ? `?device_id=${deviceId}` : "";
+  await apiPost(`/me/player/previous${query}`);
+}
+
+export async function setVolume(
+  percent: number,
+  deviceId?: string
+): Promise<void> {
+  const clamped = Math.max(0, Math.min(100, Math.round(percent)));
+  const query = deviceId
+    ? `?volume_percent=${clamped}&device_id=${deviceId}`
+    : `?volume_percent=${clamped}`;
+  await apiPut(`/me/player/volume${query}`);
+}
+
+export async function transferPlayback(
+  deviceId: string,
+  startPlaying = false
+): Promise<void> {
+  await apiPut("/me/player", {
+    device_ids: [deviceId],
+    play: startPlaying,
+  });
+}
