@@ -63,15 +63,21 @@ export async function convertToAscii(
   const targetRows = Math.min(artRows, vizRows - 2); // leave 1 row margin top+bottom
   const targetCols = Math.floor(targetRows * 2.2);
 
+  if (targetRows <= 0 || targetCols <= 0) {
+    return { trackId, thumbnail: [], lines: [], cols: vizCols, rows: vizRows };
+  }
+
   const img = await Jimp.read(buffer);
 
   // ── Full-size art ──────────────────────────────────────────────────────────
   const full = img.clone().resize(targetCols, targetRows);
   const lines: string[] = [];
+  const actualCols = full.bitmap.width;
+  const actualRows = full.bitmap.height;
 
-  for (let row = 0; row < targetRows; row++) {
+  for (let row = 0; row < actualRows; row++) {
     let line = "";
-    for (let col = 0; col < targetCols; col++) {
+    for (let col = 0; col < actualCols; col++) {
       const pixel = full.getPixelColor(col, row);
       const r = (pixel >>> 24) & 0xff;
       const g = (pixel >>> 16) & 0xff;
@@ -86,10 +92,12 @@ export async function convertToAscii(
   // ── 4×2 thumbnail ─────────────────────────────────────────────────────────
   const thumb = img.clone().resize(4, 2);
   const thumbnail: string[] = [];
+  const thumbCols = thumb.bitmap.width;
+  const thumbRows = thumb.bitmap.height;
 
-  for (let row = 0; row < 2; row++) {
+  for (let row = 0; row < thumbRows; row++) {
     let line = "";
-    for (let col = 0; col < 4; col++) {
+    for (let col = 0; col < thumbCols; col++) {
       const pixel = thumb.getPixelColor(col, row);
       const r = (pixel >>> 24) & 0xff;
       const g = (pixel >>> 16) & 0xff;
