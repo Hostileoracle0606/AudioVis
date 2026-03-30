@@ -10,6 +10,7 @@ import type { VisState } from "../state.js";
 import type { Renderer } from "../../ui/renderer.js";
 import type { Theme } from "../../ui/theme.js";
 import type { Region } from "../../ui/layout.js";
+import { pitchAnsiColor } from "../pitchPalette.js";
 
 // Width of each bar + gap
 const BAR_WIDTH = 2;
@@ -52,10 +53,11 @@ export function renderSpectrum(
           ch = isTop ? "+" : "#";
         }
 
-        const bright = theme.colorEnabled && r < 2;
         let cell = ch;
-        if (bright) cell = theme.bright + ch + theme.reset;
-        else if (theme.colorEnabled) cell = theme.normal + ch + theme.reset;
+        if (theme.colorEnabled) {
+          const intensity = r < 2 ? 0.85 : 0.55;
+          cell = pitchAnsiColor(state.pitchHue, state.pitchSaturation, intensity) + ch + theme.reset;
+        }
 
         renderer.write(col, row, cell);
       }
@@ -68,7 +70,9 @@ export function renderSpectrum(
       for (let bw = 0; bw < BAR_WIDTH; bw++) {
         const col = barX + bw;
         if (col >= rx + RW) break;
-        const cell = theme.colorEnabled ? theme.dim + ch + theme.reset : ch;
+        const cell = theme.colorEnabled
+          ? pitchAnsiColor(state.pitchHue, state.pitchSaturation, 0.25) + ch + theme.reset
+          : ch;
         renderer.write(col, row, cell);
       }
     }
@@ -83,7 +87,9 @@ export function renderSpectrum(
     const barIdx = Math.floor(relX / (BAR_WIDTH + BAR_GAP));
     const posInBar = relX - barIdx * (BAR_WIDTH + BAR_GAP);
     if (posInBar >= BAR_WIDTH) {
-      const cell = theme.colorEnabled ? theme.dim + lineChar + theme.reset : lineChar;
+      const cell = theme.colorEnabled
+        ? pitchAnsiColor(state.pitchHue, state.pitchSaturation, 0.15) + lineChar + theme.reset
+        : lineChar;
       renderer.write(col, baseLine, cell);
     }
   }
