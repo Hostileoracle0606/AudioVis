@@ -14,6 +14,19 @@ const audioAnalysisCache = new Map<string, SpotifyAudioAnalysis | null>();
 const audioFeaturesCache = new Map<string, SpotifyAudioFeatures | null>();
 const artistCache = new Map<string, SpotifyArtist>();
 
+function isOptionalSpotifyMetadataPath(path: string): boolean {
+  return (
+    path.startsWith("/audio-analysis/") ||
+    path.startsWith("/audio-features/") ||
+    path.startsWith("/artists?ids=")
+  );
+}
+
+function isForbiddenError(err: unknown): boolean {
+  const ae = err as AxiosError | undefined;
+  return ae?.response?.status === 403;
+}
+
 export async function getAccessToken(): Promise<string> {
   const tokens = loadTokens();
   if (!tokens) {
@@ -48,6 +61,11 @@ async function apiGet<T>(path: string): Promise<T | null> {
     if (ae.response?.status === 204 || ae.response?.status === 404) return null;
     if (ae.response?.status === 401) {
       // Token refresh is handled by getAccessToken() on the next call.
+      return null;
+    }
+    if (ae.response?.status === 403 && isOptionalSpotifyMetadataPath(path)) {
+      // Some Spotify apps/accounts can read playback state but are denied
+      // enrichment endpoints. Treat those responses as optional.
       return null;
     }
     throw err;
@@ -94,6 +112,11 @@ async function apiPost(path: string, body?: unknown): Promise<void> {
   } catch (err) {
     const ae = err as AxiosError;
     if (ae.response?.status === 204) return;
+    if (ae.response?.status === 403) {
+      throw new Error(
+        "Spotify Premium is required for playback control."
+      );
+    }
     if (ae.response?.status === 404) {
       throw new Error(
         "No active Spotify device found. Start Spotify on a device first."
@@ -118,7 +141,13 @@ export async function getAudioAnalysis(
     return audioAnalysisCache.get(trackId) ?? null;
   }
 
-  const result = await apiGet<SpotifyAudioAnalysis>(`/audio-analysis/${trackId}`);
+  let result: SpotifyAudioAnalysis | null;
+  try {
+    result = await apiGet<SpotifyAudioAnalysis>(`/audio-analysis/${trackId}`);
+  } catch (err) {
+    if (!isForbiddenError(err)) throw err;
+    result = null;
+  }
   audioAnalysisCache.set(trackId, result);
   return result;
 }
@@ -130,7 +159,13 @@ export async function getAudioFeatures(
     return audioFeaturesCache.get(trackId) ?? null;
   }
 
-  const result = await apiGet<SpotifyAudioFeatures>(`/audio-features/${trackId}`);
+  let result: SpotifyAudioFeatures | null;
+  try {
+    result = await apiGet<SpotifyAudioFeatures>(`/audio-features/${trackId}`);
+  } catch (err) {
+    if (!isForbiddenError(err)) throw err;
+    result = null;
+  }
   audioFeaturesCache.set(trackId, result);
   return result;
 }
@@ -143,9 +178,13 @@ export async function getArtists(artistIds: string[]): Promise<SpotifyArtist[]> 
     interface ArtistsResponse {
       artists: SpotifyArtist[];
     }
-    const result = await apiGet<ArtistsResponse>(`/artists?ids=${uncached.join(",")}`);
-    for (const artist of result?.artists ?? []) {
-      artistCache.set(artist.id, artist);
+    try {
+      const result = await apiGet<ArtistsResponse>(`/artists?ids=${uncached.join(",")}`);
+      for (const artist of result?.artists ?? []) {
+        artistCache.set(artist.id, artist);
+      }
+    } catch (err) {
+      if (!isForbiddenError(err)) throw err;
     }
   }
 

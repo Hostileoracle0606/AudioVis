@@ -458,6 +458,18 @@ Also confirm the redirect URI in Spotify matches exactly:
 http://127.0.0.1:8888/callback
 ```
 
+### Spotify `403` on Spotify metadata enrichment
+
+Spotify can allow playback/device endpoints while denying enrichment endpoints
+such as `/artists`, `/audio-features/{id}`, or `/audio-analysis/{id}` for some
+apps or accounts. Audio Vis treats those endpoints as optional, so the
+visualizer can keep running with live playback data even when those requests
+are blocked.
+
+If playback control commands like `play`, `pause`, `next`, or `volume` return
+`403`, that usually means the account does not have the Spotify access level
+required for playback control.
+
 ### macOS audio capture does not work
 
 Confirm:

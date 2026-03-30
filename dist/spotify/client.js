@@ -22,6 +22,15 @@ const BASE = "https://api.spotify.com/v1";
 const audioAnalysisCache = new Map();
 const audioFeaturesCache = new Map();
 const artistCache = new Map();
+function isOptionalSpotifyMetadataPath(path) {
+    return (path.startsWith("/audio-analysis/") ||
+        path.startsWith("/audio-features/") ||
+        path.startsWith("/artists?ids="));
+}
+function isForbiddenError(err) {
+    const ae = err;
+    return ae?.response?.status === 403;
+}
 async function getAccessToken() {
     const tokens = (0, tokenStore_js_1.loadTokens)();
     if (!tokens) {
@@ -52,6 +61,11 @@ async function apiGet(path) {
             return null;
         if (ae.response?.status === 401) {
             // Token refresh is handled by getAccessToken() on the next call.
+            return null;
+        }
+        if (ae.response?.status === 403 && isOptionalSpotifyMetadataPath(path)) {
+            // Some Spotify apps/accounts can read playback state but are denied
+            // enrichment endpoints. Treat those responses as optional.
             return null;
         }
         throw err;
@@ -96,6 +110,9 @@ async function apiPost(path, body) {
         const ae = err;
         if (ae.response?.status === 204)
             return;
+        if (ae.response?.status === 403) {
+            throw new Error("Spotify Premium is required for playback control.");
+        }
         if (ae.response?.status === 404) {
             throw new Error("No active Spotify device found. Start Spotify on a device first.");
         }
@@ -112,7 +129,15 @@ async function getAudioAnalysis(trackId) {
     if (audioAnalysisCache.has(trackId)) {
         return audioAnalysisCache.get(trackId) ?? null;
     }
-    const result = await apiGet(`/audio-analysis/${trackId}`);
+    let result;
+    try {
+        result = await apiGet(`/audio-analysis/${trackId}`);
+    }
+    catch (err) {
+        if (!isForbiddenError(err))
+            throw err;
+        result = null;
+    }
     audioAnalysisCache.set(trackId, result);
     return result;
 }
@@ -120,7 +145,15 @@ async function getAudioFeatures(trackId) {
     if (audioFeaturesCache.has(trackId)) {
         return audioFeaturesCache.get(trackId) ?? null;
     }
-    const result = await apiGet(`/audio-features/${trackId}`);
+    let result;
+    try {
+        result = await apiGet(`/audio-features/${trackId}`);
+    }
+    catch (err) {
+        if (!isForbiddenError(err))
+            throw err;
+        result = null;
+    }
     audioFeaturesCache.set(trackId, result);
     return result;
 }
@@ -128,9 +161,15 @@ async function getArtists(artistIds) {
     const uniqueIds = [...new Set(artistIds.filter(Boolean))];
     const uncached = uniqueIds.filter((id) => !artistCache.has(id));
     if (uncached.length > 0) {
-        const result = await apiGet(`/artists?ids=${uncached.join(",")}`);
-        for (const artist of result?.artists ?? []) {
-            artistCache.set(artist.id, artist);
+        try {
+            const result = await apiGet(`/artists?ids=${uncached.join(",")}`);
+            for (const artist of result?.artists ?? []) {
+                artistCache.set(artist.id, artist);
+            }
+        }
+        catch (err) {
+            if (!isForbiddenError(err))
+                throw err;
         }
     }
     return uniqueIds.map((id) => artistCache.get(id)).filter(Boolean);
