@@ -8,6 +8,9 @@
  * Uses circular mean so the 0°/360° boundary is handled correctly.
  * Returns null when all pitches are zero (caller should hold previous hue).
  *
+ * @param pitches 12-element array of pitch confidences (Spotify format). Missing
+ *                indices beyond the array length are treated as 0.
+ *
  * Pitch → hue mapping (30° per semitone):
  *   C=0°  C#=30°  D=60°  D#=90°  E=120°  F=150°
  *   F#=180°  G=210°  G#=240°  A=270°  A#=300°  B=330°
@@ -40,8 +43,11 @@ export function computePitchHue(
 
 /**
  * Interpolate between two hues along the shorter arc of the colour wheel.
- * Avoids spinning 350° the wrong way when crossing 0°/360°.
- * Returns 0 if result is NaN (both inputs NaN — should never occur in practice).
+ * Interpolates along the shorter arc of the colour wheel. When the two hues
+ * are exactly 180° apart the direction is arbitrary (inherent ambiguity in
+ * circular interpolation) but in practice pitch vectors are rarely diametrically
+ * opposite so this is not a visible concern.
+ * Returns 0 if result is NaN.
  */
 export function lerpCircularHue(
   current: number,
