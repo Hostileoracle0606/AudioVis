@@ -39,6 +39,11 @@ export interface VisState {
   albumArtUrl: string;
   priorMode: VisMode;
 
+  // Pitch-to-palette
+  pitchHue: number;        // current animated hue, degrees 0–360
+  targetPitchHue: number;  // hue computed from latest analysis segment
+  pitchSaturation: number; // saturation derived from segment (max pitch energy)
+
   // Terminal dimensions
   cols: number;
   rows: number;
@@ -115,6 +120,10 @@ export function createInitialState(
     albumArt: null,
     albumArtUrl: "",
     priorMode: mode,
+
+    pitchHue: 0,
+    targetPitchHue: 0,
+    pitchSaturation: 0.5,
 
     cols,
     rows,
