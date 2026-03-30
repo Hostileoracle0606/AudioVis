@@ -18,7 +18,8 @@ export declare const ASCII_PALETTE: string[];
 export declare const UNICODE_PALETTE: string[];
 export declare const BAR_FULL = "\u2588";
 export declare const BAR_UPPER = "\u2584";
-export declare function buildTheme(ascii: boolean, color: boolean): Theme;
+export declare function buildTheme(ascii: boolean, color: boolean, style?: StyleProfile): Theme;
 /** Return the character in the palette for a normalised density in [0, 1]. */
 export declare function densityChar(density: number, theme: Theme): string;
+import type { StyleProfile } from "../spotify/styleProfile.js";
 //# sourceMappingURL=theme.d.ts.map

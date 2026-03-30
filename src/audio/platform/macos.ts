@@ -24,6 +24,7 @@
 
 import { spawn, ChildProcess } from "child_process";
 import type { AudioSource, AudioSourceOptions, AudioSourceInfo } from "../AudioSource.js";
+import { resolveFfmpegBinary } from "../ffmpeg.js";
 
 export function createMacosAudioSource(opts: AudioSourceOptions): AudioSource {
   const { sampleRate, frameSize } = opts;
@@ -44,7 +45,7 @@ export function createMacosAudioSource(opts: AudioSourceOptions): AudioSource {
         "  2. Open Audio MIDI Setup, create a Multi-Output Device that includes\n" +
         "     both your speakers and BlackHole 2ch.\n" +
         "  3. Set the Multi-Output Device as your system sound output.\n" +
-        "  4. Re-run with: myviz visualizer --audio-device \"BlackHole 2ch\"\n\n" +
+        "  4. Re-run with: myviz setup  (or myviz visualizer --audio-device \"BlackHole 2ch\")\n\n" +
         "To list avfoundation audio devices:\n" +
         '  ffmpeg -f avfoundation -list_devices true -i ""'
     );
@@ -83,13 +84,15 @@ export function createMacosAudioSource(opts: AudioSourceOptions): AudioSource {
 
     async start(): Promise<void> {
       return new Promise((resolve, reject) => {
-        proc = spawn("ffmpeg", buildArgs(), { stdio: ["ignore", "pipe", "pipe"] });
+        proc = spawn(resolveFfmpegBinary(), buildArgs(), {
+          stdio: ["ignore", "pipe", "pipe"],
+        });
 
         proc.on("error", (err) => {
           reject(
             new Error(
               `Failed to start ffmpeg for macOS audio capture.\n` +
-                `Ensure ffmpeg is installed (brew install ffmpeg).\n` +
+                `Ensure ffmpeg is available or use the packaged macOS app bundle.\n` +
                 `Error: ${err.message}`
             )
           );

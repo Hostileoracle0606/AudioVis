@@ -1,9 +1,18 @@
 import axios, { AxiosError } from "axios";
 import { loadTokens, saveTokens } from "./tokenStore.js";
 import { refreshAccessToken } from "./auth.js";
-import type { SpotifyDevice, SpotifyPlaybackState } from "./types.js";
+import type {
+  SpotifyArtist,
+  SpotifyAudioAnalysis,
+  SpotifyAudioFeatures,
+  SpotifyDevice,
+  SpotifyPlaybackState,
+} from "./types.js";
 
 const BASE = "https://api.spotify.com/v1";
+const audioAnalysisCache = new Map<string, SpotifyAudioAnalysis | null>();
+const audioFeaturesCache = new Map<string, SpotifyAudioFeatures | null>();
+const artistCache = new Map<string, SpotifyArtist>();
 
 export async function getAccessToken(): Promise<string> {
   const tokens = loadTokens();
@@ -100,6 +109,47 @@ async function apiPost(path: string, body?: unknown): Promise<void> {
 
 export async function getCurrentPlayback(): Promise<SpotifyPlaybackState | null> {
   return apiGet<SpotifyPlaybackState>("/me/player");
+}
+
+export async function getAudioAnalysis(
+  trackId: string
+): Promise<SpotifyAudioAnalysis | null> {
+  if (audioAnalysisCache.has(trackId)) {
+    return audioAnalysisCache.get(trackId) ?? null;
+  }
+
+  const result = await apiGet<SpotifyAudioAnalysis>(`/audio-analysis/${trackId}`);
+  audioAnalysisCache.set(trackId, result);
+  return result;
+}
+
+export async function getAudioFeatures(
+  trackId: string
+): Promise<SpotifyAudioFeatures | null> {
+  if (audioFeaturesCache.has(trackId)) {
+    return audioFeaturesCache.get(trackId) ?? null;
+  }
+
+  const result = await apiGet<SpotifyAudioFeatures>(`/audio-features/${trackId}`);
+  audioFeaturesCache.set(trackId, result);
+  return result;
+}
+
+export async function getArtists(artistIds: string[]): Promise<SpotifyArtist[]> {
+  const uniqueIds = [...new Set(artistIds.filter(Boolean))];
+  const uncached = uniqueIds.filter((id) => !artistCache.has(id));
+
+  if (uncached.length > 0) {
+    interface ArtistsResponse {
+      artists: SpotifyArtist[];
+    }
+    const result = await apiGet<ArtistsResponse>(`/artists?ids=${uncached.join(",")}`);
+    for (const artist of result?.artists ?? []) {
+      artistCache.set(artist.id, artist);
+    }
+  }
+
+  return uniqueIds.map((id) => artistCache.get(id)).filter(Boolean) as SpotifyArtist[];
 }
 
 export async function getDevices(): Promise<SpotifyDevice[]> {

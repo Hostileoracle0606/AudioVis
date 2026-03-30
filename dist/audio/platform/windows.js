@@ -22,6 +22,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createWindowsAudioSource = createWindowsAudioSource;
 const child_process_1 = require("child_process");
+const ffmpeg_js_1 = require("../ffmpeg.js");
 function createWindowsAudioSource(opts) {
     const { sampleRate, frameSize } = opts;
     const deviceName = opts.deviceName ?? "default";
@@ -63,7 +64,9 @@ function createWindowsAudioSource(opts) {
         },
         async start() {
             return new Promise((resolve, reject) => {
-                proc = (0, child_process_1.spawn)("ffmpeg", buildArgs(), { stdio: ["ignore", "pipe", "pipe"] });
+                proc = (0, child_process_1.spawn)((0, ffmpeg_js_1.resolveFfmpegBinary)(), buildArgs(), {
+                    stdio: ["ignore", "pipe", "pipe"],
+                });
                 proc.on("error", (err) => {
                     reject(new Error(`Failed to start ffmpeg for Windows audio capture.\n` +
                         `Make sure ffmpeg is installed and on your PATH.\n` +

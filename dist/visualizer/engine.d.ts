@@ -33,6 +33,7 @@ export declare class VisualizerEngine {
     stop(): Promise<void>;
     private processAudioFrame;
     private pollSpotify;
+    private syncAnalysisFrame;
     private renderFrame;
     private handleAction;
 }

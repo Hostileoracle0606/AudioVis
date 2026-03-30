@@ -1,1 +1,1 @@
-{"version":3,"file":"createAudioSource.d.ts","sourceRoot":"","sources":["../../src/audio/createAudioSource.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,WAAW,EAAE,kBAAkB,EAAE,MAAM,kBAAkB,CAAC;AAExE;;;GAGG;AACH,wBAAgB,iBAAiB,CAAC,IAAI,EAAE,kBAAkB,GAAG,WAAW,CAoBvE"}
+{"version":3,"file":"createAudioSource.d.ts","sourceRoot":"","sources":["../../src/audio/createAudioSource.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,WAAW,EAAE,kBAAkB,EAAE,MAAM,kBAAkB,CAAC;AAGxE;;;;;;GAMG;AACH,wBAAgB,iBAAiB,CAAC,IAAI,EAAE,kBAAkB,GAAG;IAAE,MAAM,CAAC,EAAE,OAAO,CAAA;CAAE,GAAG,WAAW,CAqB9F"}

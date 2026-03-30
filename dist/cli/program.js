@@ -11,6 +11,8 @@ const spotifyNext_js_1 = require("./commands/spotifyNext.js");
 const spotifyPrev_js_1 = require("./commands/spotifyPrev.js");
 const spotifyVolume_js_1 = require("./commands/spotifyVolume.js");
 const spotifyTransfer_js_1 = require("./commands/spotifyTransfer.js");
+const launch_js_1 = require("./commands/launch.js");
+const setup_js_1 = require("./commands/setup.js");
 const visualizer_js_1 = require("./commands/visualizer.js");
 function buildProgram() {
     const program = new commander_1.Command();
@@ -32,6 +34,8 @@ function buildProgram() {
     program.addCommand(spotify);
     // -- visualizer --
     (0, visualizer_js_1.registerVisualizer)(program);
+    (0, setup_js_1.registerSetup)(program);
+    (0, launch_js_1.registerLaunch)(program);
     return program;
 }
 //# sourceMappingURL=program.js.map

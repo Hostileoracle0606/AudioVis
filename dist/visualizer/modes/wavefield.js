@@ -48,31 +48,43 @@ const BRAILLE_BITS = [
     [0, 1, 2, 6], // dc=0
     [3, 4, 5, 7], // dc=1
 ];
-function renderWavefieldBraille(W, H, elapsed, low, mid, high, amplitude, pulse, renderer, region, theme) {
+function renderWavefieldBraille(state, W, H, elapsed, low, mid, high, amplitude, pulse, renderer, region, theme) {
     const TAU = 2 * Math.PI;
     const DOT_W = 2 * W; // total dot columns
     const DOT_H = 4 * H; // total dot rows
+    const style = state.styleProfile;
+    const frame = state.analysisFrame;
+    const segmentBrightness = frame.segment
+        ? Math.max(0, Math.min(1, (frame.segment.loudness_max + 30) / 30))
+        : 0;
+    const tatumKick = 1 - frame.tatumProgress;
+    const beatKick = 1 - frame.beatProgress;
+    const sectionKick = frame.sectionTransition;
     // ── Spatial frequencies: how many bands fit across the screen ───────────
     // Bass → horizontal wave complexity; treble → diagonal fine detail.
-    const fH = 3.0 + low * 4.0;
-    const fV = 2.0 + mid * 3.0;
-    const fD = 1.5 + high * 5.0;
-    const fR = 1.2 + amplitude * 2.5; // radial rings; more rings when louder
+    const fH = 3.0 + low * (3.0 + style.groove * 2.0) + style.density * 1.1;
+    const fV = 2.0 + mid * (2.4 + style.organic * 1.2);
+    const fD = 1.5 + high * (3.6 + style.glitch * 3.0) + style.metallic * 0.8;
+    const fR = 1.2 + amplitude * (1.8 + style.density * 1.5) + style.darkness * 0.8;
     // ── Phase velocities (rad/s) ─────────────────────────────────────────────
-    const sH = (0.8 + low * 1.5) * TAU;
-    const sV = (0.5 + mid * 0.9) * TAU;
-    const sD = (1.4 + high * 2.5) * TAU;
-    const sR = (1.8 + amplitude * 1.2 + pulse * 5.0) * TAU; // rings blast on beat
+    const sH = (0.7 + low * (1.1 + style.groove) + beatKick * style.groove) * TAU;
+    const sV = (0.4 + mid * (0.8 + style.organic * 0.8)) * TAU;
+    const sD = (1.0 + high * (1.7 + style.glitch * 1.9) + tatumKick * style.glitch * 1.1) * TAU;
+    const sR = (1.4 + amplitude * 1.1 + pulse * (3.0 + style.aggression * 2.5) + sectionKick * 2.0) * TAU;
     // ── Beat flash: phase-kick the horizontal wave on each onset ─────────────
     // pulse is a sharp, unsmoothed onset value → creates a brief phase jump
     // that looks like a horizontal "tear" across the plasma — very hyperpop.
-    const beatPhase = pulse * Math.PI;
+    const beatPhase = pulse * Math.PI * (1 + style.glitch * 0.8) + tatumKick * style.glitch * 0.75;
     // ── Multi-band thresholding ───────────────────────────────────────────────
     // numBands: how many full interference bands span [0,1].
     // bandWidth: fraction [0,1] of each band period that's lit (dot density).
     // Both swell with audio energy, making the screen fill and throb.
-    const numBands = 3.5 + low * 2.0 + mid * 1.0;
-    const bandWidth = 0.50 + amplitude * 0.18 + pulse * 0.22;
+    const numBands = 3.0 + low * (1.6 + style.density * 1.4) + mid * (0.8 + style.density);
+    const bandWidth = 0.42 +
+        amplitude * 0.14 +
+        pulse * (0.16 + style.aggression * 0.1) +
+        style.softness * 0.08 +
+        sectionKick * 0.12;
     for (let termCol = 0; termCol < W; termCol++) {
         for (let termRow = 0; termRow < H; termRow++) {
             let bits = 0;
@@ -86,14 +98,20 @@ function renderWavefieldBraille(W, H, elapsed, low, mid, high, amplitude, pulse,
                     const cy = py - 0.5;
                     const r = Math.sqrt(cx * cx + cy * cy); // 0 at centre, ~0.71 at corner
                     // Four-component plasma sum.  Each term ∈ [-0.25, 0.25] → sum ∈ [-1, 1].
-                    const plasma = 0.25 * Math.sin(px * fH * TAU + elapsed * sH + beatPhase) +
-                        0.25 * Math.sin(py * fV * TAU + elapsed * sV) +
-                        0.25 * Math.sin((px + py) * fD * Math.PI + elapsed * sD) +
-                        0.25 * Math.sin(r * fR * TAU * 3.0 - elapsed * sR);
+                    const glitchWarp = style.glitch * 0.06 * Math.sin(py * TAU * (7 + high * 5) + elapsed * sD + tatumKick * 4);
+                    const organicDrift = style.organic * 0.05 * Math.sin(px * TAU * 1.4 + elapsed * sV * 0.35);
+                    const metallicRing = style.metallic * 0.18 * Math.cos(r * TAU * (3 + segmentBrightness * 2) - elapsed * sR);
+                    const plasma = 0.24 * Math.sin((px + glitchWarp) * fH * TAU + elapsed * sH + beatPhase) +
+                        0.24 * Math.sin((py + organicDrift) * fV * TAU + elapsed * sV) +
+                        0.24 * Math.sin((px + py + glitchWarp) * fD * Math.PI + elapsed * sD) +
+                        0.18 * Math.sin(r * fR * TAU * 3.0 - elapsed * sR) +
+                        metallicRing;
                     const v = (plasma + 1) * 0.5; // remap to [0, 1]
                     // Multi-band gate: lit if within the lit portion of the current band
                     const bandPhase = (v * numBands) % 1.0;
-                    if (bandPhase < bandWidth) {
+                    const glitchGate = style.glitch > 0.55 &&
+                        ((termCol + termRow + Math.floor(elapsed * 40)) % 11 === 0);
+                    if (bandPhase < bandWidth || (glitchGate && v > 0.56 + style.glitch * 0.1)) {
                         bits |= 1 << BRAILLE_BITS[dc][dr];
                         if (v > topV)
                             topV = v;
@@ -127,23 +145,24 @@ function renderWavefield(state, renderer, region, theme) {
     const H = region.height;
     const elapsed = (Date.now() - state.startTime) / 1000;
     const cy = H / 2;
+    const style = state.styleProfile;
     // Use the plasma path whenever the terminal supports Unicode.
     // The ASCII path is unchanged for --ascii-safe terminals.
     const useBraille = theme.palette.length <= 5;
     if (useBraille) {
-        renderWavefieldBraille(W, H, elapsed, state.low, state.mid, state.high, state.amplitude, state.pulse, renderer, region, theme);
+        renderWavefieldBraille(state, W, H, elapsed, state.low, state.mid, state.high, state.amplitude, state.pulse, renderer, region, theme);
         return;
     }
     // ── ASCII path ────────────────────────────────────────────────────────────
-    const lowAmp = 0.15 + state.low * 0.30;
-    const midAmp = 0.07 + state.mid * 0.18;
-    const highAmp = 0.03 + state.high * 0.08;
-    const speedLow = 0.35 + state.low * 0.15;
-    const speedMid = 0.70 + state.mid * 0.25;
-    const speedHigh = 1.40 + state.high * 0.40;
-    const thick1 = 2.0 + state.low * 1.5 + state.pulse * 0.8;
-    const thick2 = 1.6 + state.mid * 1.2;
-    const thick3 = 1.2 + state.high * 0.8;
+    const lowAmp = 0.12 + state.low * (0.22 + style.density * 0.15);
+    const midAmp = 0.06 + state.mid * (0.14 + style.organic * 0.12);
+    const highAmp = 0.02 + state.high * (0.06 + style.glitch * 0.08);
+    const speedLow = 0.28 + state.low * (0.12 + style.groove * 0.18);
+    const speedMid = 0.55 + state.mid * (0.15 + style.organic * 0.12);
+    const speedHigh = 1.05 + state.high * (0.24 + style.glitch * 0.32);
+    const thick1 = 1.8 + state.low * (1.1 + style.density) + state.pulse * (0.5 + style.aggression);
+    const thick2 = 1.3 + state.mid * (0.9 + style.organic * 0.8);
+    const thick3 = 0.9 + state.high * (0.5 + style.glitch * 1.2);
     for (let col = 0; col < W; col++) {
         const xNorm = col / W;
         const phaseShift = xNorm * 2 * Math.PI;

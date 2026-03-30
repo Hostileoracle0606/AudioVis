@@ -5,6 +5,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getAccessToken = getAccessToken;
 exports.getCurrentPlayback = getCurrentPlayback;
+exports.getAudioAnalysis = getAudioAnalysis;
+exports.getAudioFeatures = getAudioFeatures;
+exports.getArtists = getArtists;
 exports.getDevices = getDevices;
 exports.play = play;
 exports.pause = pause;
@@ -16,6 +19,9 @@ const axios_1 = __importDefault(require("axios"));
 const tokenStore_js_1 = require("./tokenStore.js");
 const auth_js_1 = require("./auth.js");
 const BASE = "https://api.spotify.com/v1";
+const audioAnalysisCache = new Map();
+const audioFeaturesCache = new Map();
+const artistCache = new Map();
 async function getAccessToken() {
     const tokens = (0, tokenStore_js_1.loadTokens)();
     if (!tokens) {
@@ -101,6 +107,33 @@ async function apiPost(path, body) {
 // ---------------------------------------------------------------------------
 async function getCurrentPlayback() {
     return apiGet("/me/player");
+}
+async function getAudioAnalysis(trackId) {
+    if (audioAnalysisCache.has(trackId)) {
+        return audioAnalysisCache.get(trackId) ?? null;
+    }
+    const result = await apiGet(`/audio-analysis/${trackId}`);
+    audioAnalysisCache.set(trackId, result);
+    return result;
+}
+async function getAudioFeatures(trackId) {
+    if (audioFeaturesCache.has(trackId)) {
+        return audioFeaturesCache.get(trackId) ?? null;
+    }
+    const result = await apiGet(`/audio-features/${trackId}`);
+    audioFeaturesCache.set(trackId, result);
+    return result;
+}
+async function getArtists(artistIds) {
+    const uniqueIds = [...new Set(artistIds.filter(Boolean))];
+    const uncached = uniqueIds.filter((id) => !artistCache.has(id));
+    if (uncached.length > 0) {
+        const result = await apiGet(`/artists?ids=${uncached.join(",")}`);
+        for (const artist of result?.artists ?? []) {
+            artistCache.set(artist.id, artist);
+        }
+    }
+    return uniqueIds.map((id) => artistCache.get(id)).filter(Boolean);
 }
 async function getDevices() {
     const res = await apiGet("/me/player/devices");

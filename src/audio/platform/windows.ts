@@ -21,6 +21,7 @@
 
 import { spawn, ChildProcess } from "child_process";
 import type { AudioSource, AudioSourceOptions, AudioSourceInfo } from "../AudioSource.js";
+import { resolveFfmpegBinary } from "../ffmpeg.js";
 
 export function createWindowsAudioSource(opts: AudioSourceOptions): AudioSource {
   const { sampleRate, frameSize } = opts;
@@ -68,7 +69,9 @@ export function createWindowsAudioSource(opts: AudioSourceOptions): AudioSource 
 
     async start(): Promise<void> {
       return new Promise((resolve, reject) => {
-        proc = spawn("ffmpeg", buildArgs(), { stdio: ["ignore", "pipe", "pipe"] });
+        proc = spawn(resolveFfmpegBinary(), buildArgs(), {
+          stdio: ["ignore", "pipe", "pipe"],
+        });
 
         proc.on("error", (err) => {
           reject(

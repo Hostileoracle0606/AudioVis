@@ -8,6 +8,8 @@ import { registerSpotifyNext } from "./commands/spotifyNext.js";
 import { registerSpotifyPrev } from "./commands/spotifyPrev.js";
 import { registerSpotifyVolume } from "./commands/spotifyVolume.js";
 import { registerSpotifyTransfer } from "./commands/spotifyTransfer.js";
+import { registerLaunch } from "./commands/launch.js";
+import { registerSetup } from "./commands/setup.js";
 import { registerVisualizer } from "./commands/visualizer.js";
 
 export function buildProgram(): Command {
@@ -37,6 +39,8 @@ export function buildProgram(): Command {
 
   // -- visualizer --
   registerVisualizer(program);
+  registerSetup(program);
+  registerLaunch(program);
 
   return program;
 }

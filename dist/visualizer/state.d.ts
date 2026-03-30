@@ -1,4 +1,7 @@
-export type VisMode = "wavefield" | "scroll" | "spectrum";
+import type { AsciiArt } from "../album/converter.js";
+import type { SpotifyAudioAnalysis } from "../spotify/types.js";
+import type { AnalysisFrame, StyleProfile } from "../spotify/styleProfile.js";
+export type VisMode = "wavefield" | "scroll" | "spectrum" | "album-art";
 export interface VisState {
     mode: VisMode;
     smoothedBuckets: Float32Array;
@@ -9,11 +12,24 @@ export interface VisState {
     amplitude: number;
     pulse: number;
     trackName: string;
+    trackId: string;
     artistName: string;
+    albumName: string;
     deviceName: string;
     isPlaying: boolean;
     progressMs: number;
     durationMs: number;
+    spotifyStatus: string;
+    currentSegmentIndex: number;
+    currentBeatIndex: number;
+    currentTatumIndex: number;
+    currentSectionIndex: number;
+    analysis: SpotifyAudioAnalysis | null;
+    analysisFrame: AnalysisFrame;
+    styleProfile: StyleProfile;
+    albumArt: AsciiArt | null;
+    albumArtUrl: string;
+    priorMode: VisMode;
     cols: number;
     rows: number;
     startTime: number;

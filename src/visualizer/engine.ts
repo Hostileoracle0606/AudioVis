@@ -27,6 +27,11 @@ import { enterAlternateScreen, exitAlternateScreen, getTerminalSize } from "../u
 import { startInput, stopInput } from "../ui/input.js";
 import type { Action } from "../ui/input.js";
 import * as spotify from "../spotify/client.js";
+import {
+  buildAnalysisFrame,
+  inferStyleProfile,
+  smoothStyleProfile,
+} from "../spotify/styleProfile.js";
 import { onCleanup } from "../utils/cleanup.js";
 import { fetchImageBuffer } from "../album/fetcher.js";
 import { convertToAscii } from "../album/converter.js";
@@ -64,7 +69,11 @@ export class VisualizerEngine {
 
   async start(): Promise<void> {
     this.running = true;
-    this.theme = buildTheme(this.opts.asciiSafe, !this.opts.noColor);
+    this.theme = buildTheme(
+      this.opts.asciiSafe,
+      !this.opts.noColor,
+      this.state.styleProfile
+    );
 
     // Set up terminal
     enterAlternateScreen();
@@ -148,6 +157,35 @@ export class VisualizerEngine {
     this.state.high = smoothValue(this.state.high, features.high, DEFAULT_ENERGY_SMOOTHING);
     this.state.amplitude = smoothValue(this.state.amplitude, features.rms, DEFAULT_ENERGY_SMOOTHING);
     this.state.pulse = features.pulse; // don't smooth pulse — it should be sharp
+    this.state.styleProfile = smoothStyleProfile(
+      this.state.styleProfile,
+      {
+        ...this.state.styleProfile,
+        glitch: Math.min(
+          1,
+          this.state.styleProfile.glitch * 0.92 +
+            features.high * 0.03 +
+            features.pulse * 0.09
+        ),
+        aggression: Math.min(
+          1,
+          this.state.styleProfile.aggression * 0.94 +
+            features.low * 0.03 +
+            features.pulse * 0.06
+        ),
+        density: Math.min(
+          1,
+          this.state.styleProfile.density * 0.95 + features.rms * 0.04
+        ),
+        groove: Math.min(
+          1,
+          this.state.styleProfile.groove * 0.96 +
+            features.low * 0.02 +
+            features.mid * 0.01
+        ),
+      },
+      0.08
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -159,17 +197,22 @@ export class VisualizerEngine {
       const playback = await spotify.getCurrentPlayback();
       if (!playback || !playback.item) {
         this.state.trackName   = "";
+        this.state.trackId     = "";
         this.state.artistName  = "";
         this.state.albumName   = "";
         this.state.deviceName  = playback?.device?.name ?? "";
         this.state.isPlaying   = false;
         this.state.progressMs  = 0;
         this.state.durationMs  = 0;
+        this.state.spotifyStatus = "No active Spotify playback";
+        this.state.analysis = null;
         this.state.albumArtUrl = "";
         this.state.albumArt    = null;
         return;
       }
 
+      const previousTrackId = this.state.trackId;
+      this.state.trackId    = playback.item.id;
       this.state.trackName  = playback.item.name;
       this.state.artistName = playback.item.artists.map((a) => a.name).join(", ");
       this.state.albumName  = playback.item.album.name;
@@ -177,6 +220,29 @@ export class VisualizerEngine {
       this.state.isPlaying  = playback.is_playing;
       this.state.progressMs = playback.progress_ms ?? 0;
       this.state.durationMs = playback.item.duration_ms;
+      this.state.spotifyStatus = "";
+
+      if (playback.item.id !== previousTrackId) {
+        const artistIds = playback.item.artists.map((artist) => artist.id).filter(Boolean);
+        const [artists, features, analysis] = await Promise.all([
+          spotify.getArtists(artistIds),
+          spotify.getAudioFeatures(playback.item.id),
+          spotify.getAudioAnalysis(playback.item.id),
+        ]);
+
+        this.state.analysis = analysis;
+        this.state.currentSegmentIndex = 0;
+        this.state.currentBeatIndex = 0;
+        this.state.currentTatumIndex = 0;
+        this.state.currentSectionIndex = 0;
+        this.state.styleProfile = inferStyleProfile({
+          artists,
+          features,
+          analysis,
+        });
+      }
+
+      this.syncAnalysisFrame();
 
       // Album art: use the smallest image (last in array, Spotify orders largest→smallest)
       const images = playback.item.album.images;
@@ -208,9 +274,70 @@ export class VisualizerEngine {
             });
         }
       }
-    } catch {
-      // Network or auth error — don't crash the visualizer
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Spotify metadata unavailable";
+      this.state.trackName = "";
+      this.state.artistName = "";
+      this.state.albumName = "";
+      this.state.deviceName = "";
+      this.state.isPlaying = false;
+      this.state.progressMs = 0;
+      this.state.durationMs = 0;
+      this.state.trackId = "";
+      this.state.analysis = null;
+      this.state.albumArtUrl = "";
+      this.state.albumArt = null;
+      this.state.spotifyStatus = msg;
     }
+  }
+
+  private syncAnalysisFrame(): void {
+    const { analysis, progressMs } = this.state;
+    if (!analysis) {
+      return;
+    }
+
+    const playbackSeconds = progressMs / 1000;
+    const advanceIndex = <T extends { start: number }>(
+      collection: T[],
+      currentIndex: number
+    ): number => {
+      if (collection.length === 0) return 0;
+      let index = Math.max(0, Math.min(currentIndex, collection.length - 1));
+      while (index + 1 < collection.length && playbackSeconds >= collection[index + 1].start) {
+        index += 1;
+      }
+      while (index > 0 && playbackSeconds < collection[index].start) {
+        index -= 1;
+      }
+      return index;
+    };
+
+    this.state.currentSegmentIndex = advanceIndex(
+      analysis.segments,
+      this.state.currentSegmentIndex
+    );
+    this.state.currentBeatIndex = advanceIndex(
+      analysis.beats,
+      this.state.currentBeatIndex
+    );
+    this.state.currentTatumIndex = advanceIndex(
+      analysis.tatums,
+      this.state.currentTatumIndex
+    );
+    this.state.currentSectionIndex = advanceIndex(
+      analysis.sections,
+      this.state.currentSectionIndex
+    );
+
+    this.state.analysisFrame = buildAnalysisFrame({
+      analysis,
+      progressMs,
+      currentSegmentIndex: this.state.currentSegmentIndex,
+      currentBeatIndex: this.state.currentBeatIndex,
+      currentTatumIndex: this.state.currentTatumIndex,
+      currentSectionIndex: this.state.currentSectionIndex,
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -219,6 +346,12 @@ export class VisualizerEngine {
 
   private renderFrame(): void {
     if (!this.running) return;
+    this.syncAnalysisFrame();
+    this.theme = buildTheme(
+      this.opts.asciiSafe,
+      !this.opts.noColor,
+      this.state.styleProfile
+    );
 
     const { cols, rows } = { cols: this.state.cols, rows: this.state.rows };
 
@@ -258,11 +391,16 @@ export class VisualizerEngine {
       const elapsed  = formatSeconds(s.progressMs / 1000);
       const total    = formatSeconds(s.durationMs / 1000);
       const timePart = `${elapsed} / ${total}`;
-      const stateLine = `  State: ${stateStr}`;
+      const stateLine =
+        `  State: ${stateStr}   Style: ${truncateMiddle(s.styleProfile.label, 24)}   Pitch: ${s.styleProfile.dominantPitchLabel}`;
       this.renderer.write(5, 1, padRight(stateLine, cols - timePart.length - 6));
       this.renderer.write(cols - timePart.length, 1, timePart);
     } else {
-      this.renderer.write(0, 0, "  Now playing: Nothing active");
+      const title = truncateMiddle(
+        s.spotifyStatus || "No active Spotify playback",
+        Math.max(1, cols - 18)
+      );
+      this.renderer.write(0, 0, `  Spotify: ${title}`);
       this.renderer.write(0, 1, "  State: Idle");
     }
 

@@ -1,1 +1,1 @@
-{"version":3,"file":"program.d.ts","sourceRoot":"","sources":["../../src/cli/program.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,OAAO,EAAE,MAAM,WAAW,CAAC;AAYpC,wBAAgB,YAAY,IAAI,OAAO,CA6BtC"}
+{"version":3,"file":"program.d.ts","sourceRoot":"","sources":["../../src/cli/program.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,OAAO,EAAE,MAAM,WAAW,CAAC;AAcpC,wBAAgB,YAAY,IAAI,OAAO,CA+BtC"}

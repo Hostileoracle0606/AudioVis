@@ -1,22 +1,6 @@
 import fs from "fs";
-import path from "path";
-import os from "os";
 import type { TokenPayload } from "./types.js";
-
-function getTokenPath(): string {
-  // In development, keep tokens in the project directory.
-  // In production (after npm link), store in user config dir.
-  const configDir =
-    process.env.NODE_ENV === "development"
-      ? process.cwd()
-      : path.join(os.homedir(), ".config", "audio-vis");
-
-  if (!fs.existsSync(configDir)) {
-    fs.mkdirSync(configDir, { recursive: true });
-  }
-
-  return path.join(configDir, ".spotify-tokens.json");
-}
+import { getTokenPath } from "../utils/paths.js";
 
 export function loadTokens(): TokenPayload | null {
   const p = getTokenPath();
