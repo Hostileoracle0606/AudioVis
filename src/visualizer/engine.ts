@@ -27,6 +27,7 @@ import { enterAlternateScreen, exitAlternateScreen, getTerminalSize } from "../u
 import { startInput, stopInput } from "../ui/input.js";
 import type { Action } from "../ui/input.js";
 import * as spotify from "../spotify/client.js";
+import { SpotifyRateLimitError } from "../spotify/client.js";
 import {
   buildAnalysisFrame,
   inferStyleProfile,
@@ -37,6 +38,7 @@ import { fetchImageBuffer } from "../album/fetcher.js";
 import { convertToAscii } from "../album/converter.js";
 import { getCached, setCached } from "../album/cache.js";
 import { renderAlbumArt } from "./modes/albumArt.js";
+import { computePitchHue, lerpCircularHue } from "./pitchPalette.js";
 
 export interface EngineOptions {
   mode: VisMode;
@@ -48,6 +50,10 @@ export interface EngineOptions {
 }
 
 export class VisualizerEngine {
+  private static readonly PLAYING_POLL_MS = 5_000;
+  private static readonly IDLE_POLL_MS = 10_000;
+  private static readonly RETRY_POLL_MS = 1_000;
+
   private audio: AudioSource;
   private opts: EngineOptions;
   private state: VisState;
@@ -56,7 +62,9 @@ export class VisualizerEngine {
   private peak = { value: 1e-6 };
   private running = false;
   private renderTimer: ReturnType<typeof setInterval> | null = null;
-  private spotifyTimer: ReturnType<typeof setInterval> | null = null;
+  private spotifyTimer: ReturnType<typeof setTimeout> | null = null;
+  private spotifyPollInFlight = false;
+  private spotifyBackoffUntil = 0;
   private lastFrameMs = 0;
 
   constructor(audio: AudioSource, opts: EngineOptions) {
@@ -108,8 +116,8 @@ export class VisualizerEngine {
     await this.audio.start();
 
     // Kick off Spotify poll immediately
-    void this.pollSpotify();
-    this.spotifyTimer = setInterval(() => void this.pollSpotify(), 1000);
+    this.lastFrameMs = Date.now();
+    this.scheduleSpotifyPoll(0);
 
     // Render loop
     const frameMs = Math.round(1000 / this.opts.fps);
@@ -208,6 +216,8 @@ export class VisualizerEngine {
         this.state.analysis = null;
         this.state.albumArtUrl = "";
         this.state.albumArt    = null;
+        this.state.targetPitchHue = 0;
+        this.state.pitchSaturation = 0.5;
         return;
       }
 
@@ -275,6 +285,11 @@ export class VisualizerEngine {
         }
       }
     } catch (err) {
+      if (err instanceof SpotifyRateLimitError) {
+        this.spotifyBackoffUntil = Date.now() + err.retryAfterMs;
+        this.state.spotifyStatus = err.message;
+        return;
+      }
       const msg = err instanceof Error ? err.message : "Spotify metadata unavailable";
       this.state.trackName = "";
       this.state.artistName = "";
@@ -289,6 +304,57 @@ export class VisualizerEngine {
       this.state.albumArt = null;
       this.state.spotifyStatus = msg;
     }
+  }
+
+  private scheduleSpotifyPoll(delayMs: number): void {
+    if (!this.running) return;
+    if (this.spotifyTimer) {
+      clearTimeout(this.spotifyTimer);
+    }
+    this.spotifyTimer = setTimeout(
+      () => void this.runSpotifyPollLoop(),
+      Math.max(0, delayMs)
+    );
+  }
+
+  private nextSpotifyPollDelay(): number {
+    const now = Date.now();
+    if (now < this.spotifyBackoffUntil) {
+      return this.spotifyBackoffUntil - now;
+    }
+    return this.state.isPlaying
+      ? VisualizerEngine.PLAYING_POLL_MS
+      : VisualizerEngine.IDLE_POLL_MS;
+  }
+
+  private async runSpotifyPollLoop(): Promise<void> {
+    if (!this.running) return;
+
+    const now = Date.now();
+    if (now < this.spotifyBackoffUntil) {
+      this.scheduleSpotifyPoll(this.spotifyBackoffUntil - now);
+      return;
+    }
+
+    if (this.spotifyPollInFlight) {
+      this.scheduleSpotifyPoll(VisualizerEngine.RETRY_POLL_MS);
+      return;
+    }
+
+    this.spotifyPollInFlight = true;
+    try {
+      await this.pollSpotify();
+    } finally {
+      this.spotifyPollInFlight = false;
+      if (this.running) {
+        this.scheduleSpotifyPoll(this.nextSpotifyPollDelay());
+      }
+    }
+  }
+
+  private requestImmediateSpotifyPoll(): void {
+    this.spotifyBackoffUntil = 0;
+    this.scheduleSpotifyPoll(0);
   }
 
   private syncAnalysisFrame(): void {
@@ -338,6 +404,17 @@ export class VisualizerEngine {
       currentTatumIndex: this.state.currentTatumIndex,
       currentSectionIndex: this.state.currentSectionIndex,
     });
+
+    // Update pitch hue target from current segment
+    const seg = analysis.segments[this.state.currentSegmentIndex];
+    if (seg?.pitches?.length) {
+      const pitchResult = computePitchHue(seg.pitches);
+      if (pitchResult !== null) {
+        this.state.targetPitchHue = pitchResult.hue;
+        this.state.pitchSaturation = pitchResult.saturation;
+      }
+      // if null (all-zero pitches), hold previous values
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -346,6 +423,15 @@ export class VisualizerEngine {
 
   private renderFrame(): void {
     if (!this.running) return;
+    const now = Date.now();
+    if (this.lastFrameMs > 0 && this.state.isPlaying) {
+      const elapsedMs = now - this.lastFrameMs;
+      this.state.progressMs = Math.min(
+        this.state.durationMs,
+        this.state.progressMs + elapsedMs
+      );
+    }
+    this.lastFrameMs = now;
     this.syncAnalysisFrame();
     this.theme = buildTheme(
       this.opts.asciiSafe,
@@ -412,6 +498,12 @@ export class VisualizerEngine {
     this.renderer.writeCenter(layout.progress.y, bar);
 
     // --- Visualizer ---
+    // Smooth pitch hue toward target (lerp factor 0.08 ≈ 0.7 s half-life at 30 fps)
+    this.state.pitchHue = lerpCircularHue(
+      this.state.pitchHue,
+      this.state.targetPitchHue,
+      0.08
+    );
     pushScrollHistory(s, layout.visualizer.width);
     if (s.mode === "wavefield") {
       renderWavefield(s, this.renderer, layout.visualizer, this.theme);
@@ -445,16 +537,15 @@ export class VisualizerEngine {
         case "toggle_play":
           if (this.state.isPlaying) await spotify.pause();
           else await spotify.play();
-          // Immediately refresh metadata
-          await this.pollSpotify();
+          this.requestImmediateSpotifyPoll();
           break;
         case "next":
           await spotify.nextTrack();
-          await this.pollSpotify();
+          this.requestImmediateSpotifyPoll();
           break;
         case "prev":
           await spotify.previousTrack();
-          await this.pollSpotify();
+          this.requestImmediateSpotifyPoll();
           break;
         case "switch_mode": {
           if (this.state.mode === "album-art") break;
@@ -464,7 +555,7 @@ export class VisualizerEngine {
           break;
         }
         case "refresh":
-          await this.pollSpotify();
+          this.requestImmediateSpotifyPoll();
           break;
         case "toggle_album_art":
           if (this.state.mode !== "album-art") {
