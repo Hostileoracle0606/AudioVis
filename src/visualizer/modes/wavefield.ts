@@ -20,6 +20,7 @@ import type { VisState } from "../state.js";
 import type { Renderer } from "../../ui/renderer.js";
 import type { Theme } from "../../ui/theme.js";
 import type { Region } from "../../ui/layout.js";
+import { pitchAnsiColor } from "../pitchPalette.js";
 
 // ---------------------------------------------------------------------------
 // ASCII path — three-wave distance-to-character ramp (unchanged)
@@ -160,12 +161,11 @@ function renderWavefieldBraille(
       let cell = ch;
 
       if (theme.colorEnabled) {
-        // Three brightness tiers based on where in [0,1] the peak field value sits.
-        // High v = plasma peak (constructive interference) → white-hot.
-        // Low v = band edge → dim corona.
-        if      (topV > 0.72) cell = theme.bright + ch + theme.reset;
-        else if (topV > 0.54) cell = theme.normal + ch + theme.reset;
-        else                  cell = theme.dim    + ch + theme.reset;
+        // Map plasma field value to intensity tier, then apply pitch hue.
+        // topV > 0.72 = plasma peak (constructive interference) → bright.
+        // topV < 0.54 = band edge → dim corona.
+        const intensity = topV > 0.72 ? 0.85 : topV > 0.54 ? 0.55 : 0.25;
+        cell = pitchAnsiColor(state.pitchHue, state.pitchSaturation, intensity) + ch + theme.reset;
       }
 
       renderer.write(termCol, region.y + termRow, cell);
@@ -250,13 +250,11 @@ export function renderWavefield(
       const ch = distToChar(minDist);
       if (ch === " ") continue;
 
-      const bright = theme.colorEnabled && minDist < 0.5;
-      const dim    = theme.colorEnabled && minDist > 1.5;
-
       let cell = ch;
-      if (bright) cell = theme.bright + ch + theme.reset;
-      else if (dim) cell = theme.dim  + ch + theme.reset;
-      else if (theme.colorEnabled) cell = theme.normal + ch + theme.reset;
+      if (theme.colorEnabled) {
+        const intensity = minDist < 0.5 ? 0.85 : minDist > 1.5 ? 0.25 : 0.55;
+        cell = pitchAnsiColor(state.pitchHue, state.pitchSaturation, intensity) + ch + theme.reset;
+      }
 
       renderer.write(col, absRow, cell);
     }
