@@ -1,10 +1,15 @@
 import type { AudioSource, AudioSourceOptions } from "./AudioSource.js";
+import { createSilentAudioSource } from "./silent.js";
 
 /**
  * Factory: selects the correct platform backend based on process.platform
  * and constructs an AudioSource with the given options.
+ *
+ * Pass `silent: true` to skip audio capture entirely (emits zero-filled
+ * frames) — useful for testing the visualizer UI without a real audio device.
  */
-export function createAudioSource(opts: AudioSourceOptions): AudioSource {
+export function createAudioSource(opts: AudioSourceOptions & { silent?: boolean }): AudioSource {
+  if (opts.silent) return createSilentAudioSource(opts);
   switch (process.platform) {
     case "linux": {
       const { createLinuxAudioSource } = require("./platform/linux.js") as typeof import("./platform/linux.js");
