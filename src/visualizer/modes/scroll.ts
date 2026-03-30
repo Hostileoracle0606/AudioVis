@@ -14,6 +14,7 @@ import type { VisState } from "../state.js";
 import type { Renderer } from "../../ui/renderer.js";
 import type { Theme } from "../../ui/theme.js";
 import type { Region } from "../../ui/layout.js";
+import { pitchAnsiColor } from "../pitchPalette.js";
 
 /**
  * Advance the scroll history buffer one step.
@@ -72,9 +73,8 @@ export function renderScroll(
 
       let cell = ch;
       if (theme.colorEnabled) {
-        if (frac < 0.25) cell = theme.bright + ch + theme.reset;
-        else if (frac > 0.65) cell = theme.dim + ch + theme.reset;
-        else cell = theme.normal + ch + theme.reset;
+        const intensity = frac < 0.25 ? 0.85 : frac > 0.65 ? 0.25 : 0.55;
+        cell = pitchAnsiColor(state.pitchHue, state.pitchSaturation, intensity) + ch + theme.reset;
       }
 
       renderer.write(col, region.y + row, cell);
