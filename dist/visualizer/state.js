@@ -1,24 +1,31 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.VIS_MODE_IDS = void 0;
 exports.createInitialState = createInitialState;
+exports.VIS_MODE_IDS = [
+    "wavefield",
+    "scroll",
+    "spectrum",
+    "skyline",
+];
 function createInitialState(mode, numBars, cols, rows) {
     const initialStyle = {
-        label: "shape-shifting pulse",
+        label: "steady glow",
         confidence: 0,
-        glitch: 0.25,
-        neon: 0.4,
-        organic: 0.25,
-        metallic: 0.2,
-        softness: 0.35,
-        aggression: 0.3,
-        density: 0.4,
-        groove: 0.35,
-        darkness: 0.3,
-        dominantPitchClass: 9,
-        dominantPitchLabel: "A",
-        hue: 300,
-        saturation: 0.55,
-        brightness: 0.55,
+        glitch: 0.2,
+        neon: 0.35,
+        organic: 0.3,
+        metallic: 0.15,
+        softness: 0.4,
+        aggression: 0.2,
+        density: 0.25,
+        groove: 0.3,
+        darkness: 0.25,
+        dominantPitchClass: 4,
+        dominantPitchLabel: "E",
+        hue: 120,
+        saturation: 0.45,
+        brightness: 0.4,
         genreHints: [],
     };
     return {
@@ -31,19 +38,13 @@ function createInitialState(mode, numBars, cols, rows) {
         amplitude: 0,
         pulse: 0,
         trackName: "",
-        trackId: "",
         artistName: "",
         albumName: "",
-        deviceName: "",
+        appName: "Spotify",
         isPlaying: false,
         progressMs: 0,
         durationMs: 0,
-        spotifyStatus: "",
-        currentSegmentIndex: 0,
-        currentBeatIndex: 0,
-        currentTatumIndex: 0,
-        currentSectionIndex: 0,
-        analysis: null,
+        statusMessage: "",
         analysisFrame: {
             segment: null,
             tatumProgress: 0,
@@ -52,14 +53,14 @@ function createInitialState(mode, numBars, cols, rows) {
             sectionTransition: 0,
         },
         styleProfile: initialStyle,
-        albumArt: null,
-        albumArtUrl: "",
-        priorMode: mode,
+        pitchHue: initialStyle.hue,
+        targetPitchHue: initialStyle.hue,
+        pitchSaturation: initialStyle.saturation,
         cols,
         rows,
         startTime: Date.now(),
         numBars,
-        scrollHistory: new Float32Array(cols),
+        modeData: {},
     };
 }
 //# sourceMappingURL=state.js.map

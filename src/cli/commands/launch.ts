@@ -2,9 +2,8 @@ import type { Command } from "commander";
 import pc from "picocolors";
 import { loadConfig } from "../../config/store.js";
 import { ensureMacosReady } from "../../macos/setup.js";
-import { login } from "../../spotify/auth.js";
-import { loadTokens } from "../../spotify/tokenStore.js";
 import { fatalError } from "../../utils/errors.js";
+import { VIS_MODE_IDS } from "../../visualizer/state.js";
 import { runVisualizer } from "./visualizer.js";
 
 interface LaunchOptions {
@@ -22,7 +21,7 @@ export function registerLaunch(program: Command): void {
   program
     .command("launch")
     .description("Prepare the app, then launch the visualizer")
-    .option("--mode <wavefield|scroll|spectrum>", "Visualization mode", "wavefield")
+    .option(`--mode <${VIS_MODE_IDS.join("|")}>`, "Visualization mode", "wavefield")
     .option("--bars <n>", "Number of spectrum bars", "32")
     .option("--fps <n>", "Target frames per second", "30")
     .option("--sample-rate <n>", "Audio sample rate (Hz)", "44100")
@@ -32,17 +31,15 @@ export function registerLaunch(program: Command): void {
     .option("--app", "Marks that the command is running from the macOS app bundle")
     .action(async (opts: LaunchOptions) => {
       try {
-        let audioDevice = loadConfig().audio?.macosDeviceName;
+        let audioDevice =
+          loadConfig().runtime?.analyzerSource ??
+          loadConfig().audio?.macosDeviceName;
 
         if (process.platform === "darwin") {
           const result = await ensureMacosReady();
           audioDevice = result.deviceName;
-        }
-
-        if (!loadTokens()) {
-          console.log(pc.cyan("\nSpotify login"));
-          console.log("No saved Spotify session was found, so browser login will start now.");
-          await login();
+          console.log(pc.dim(`Spotify Desktop detected.`));
+          console.log(pc.dim(`cava binary: ${result.cavaPath}`));
         }
 
         await runVisualizer({

@@ -1,13 +1,21 @@
-import type { AsciiArt } from "../album/converter.js";
-import type { SpotifyAudioAnalysis } from "../spotify/types.js";
-import type { AnalysisFrame, StyleProfile } from "../spotify/styleProfile.js";
+import type {
+  AnalysisFrame as MotionFrame,
+  StyleProfile,
+} from "../spotify/styleProfile.js";
 
-export type VisMode = "wavefield" | "scroll" | "spectrum" | "album-art";
+export const VIS_MODE_IDS = [
+  "wavefield",
+  "scroll",
+  "spectrum",
+  "skyline",
+] as const;
+
+export type VisMode = typeof VIS_MODE_IDS[number];
 
 export interface VisState {
   mode: VisMode;
 
-  // DSP state
+  // Analyzer state
   smoothedBuckets: Float32Array;
   rawBuckets: Float32Array;
   low: number;
@@ -16,33 +24,24 @@ export interface VisState {
   amplitude: number;
   pulse: number;
 
-  // Spotify metadata
+  // Local player metadata
   trackName: string;
-  trackId: string;
   artistName: string;
   albumName: string;
-  deviceName: string;
+  appName: string;
   isPlaying: boolean;
   progressMs: number;
   durationMs: number;
-  spotifyStatus: string;
-  currentSegmentIndex: number;
-  currentBeatIndex: number;
-  currentTatumIndex: number;
-  currentSectionIndex: number;
-  analysis: SpotifyAudioAnalysis | null;
-  analysisFrame: AnalysisFrame;
+  statusMessage: string;
+
+  // Signal-derived motion/theme state
+  analysisFrame: MotionFrame;
   styleProfile: StyleProfile;
 
-  // Album art
-  albumArt: AsciiArt | null;
-  albumArtUrl: string;
-  priorMode: VisMode;
-
   // Pitch-to-palette
-  pitchHue: number;        // current animated hue, degrees 0–360
-  targetPitchHue: number;  // hue computed from latest analysis segment
-  pitchSaturation: number; // saturation derived from segment (max pitch energy)
+  pitchHue: number;
+  targetPitchHue: number;
+  pitchSaturation: number;
 
   // Terminal dimensions
   cols: number;
@@ -54,8 +53,8 @@ export interface VisState {
   // Number of visual buckets / bars
   numBars: number;
 
-  // Ring buffer for scroll mode
-  scrollHistory: Float32Array;
+  // Mode-local caches and buffers
+  modeData: Record<string, unknown>;
 }
 
 export function createInitialState(
@@ -65,22 +64,22 @@ export function createInitialState(
   rows: number
 ): VisState {
   const initialStyle: StyleProfile = {
-    label: "shape-shifting pulse",
+    label: "steady glow",
     confidence: 0,
-    glitch: 0.25,
-    neon: 0.4,
-    organic: 0.25,
-    metallic: 0.2,
-    softness: 0.35,
-    aggression: 0.3,
-    density: 0.4,
-    groove: 0.35,
-    darkness: 0.3,
-    dominantPitchClass: 9,
-    dominantPitchLabel: "A",
-    hue: 300,
-    saturation: 0.55,
-    brightness: 0.55,
+    glitch: 0.2,
+    neon: 0.35,
+    organic: 0.3,
+    metallic: 0.15,
+    softness: 0.4,
+    aggression: 0.2,
+    density: 0.25,
+    groove: 0.3,
+    darkness: 0.25,
+    dominantPitchClass: 4,
+    dominantPitchLabel: "E",
+    hue: 120,
+    saturation: 0.45,
+    brightness: 0.4,
     genreHints: [],
   };
 
@@ -95,19 +94,14 @@ export function createInitialState(
     pulse: 0,
 
     trackName: "",
-    trackId: "",
     artistName: "",
     albumName: "",
-    deviceName: "",
+    appName: "Spotify",
     isPlaying: false,
     progressMs: 0,
     durationMs: 0,
-    spotifyStatus: "",
-    currentSegmentIndex: 0,
-    currentBeatIndex: 0,
-    currentTatumIndex: 0,
-    currentSectionIndex: 0,
-    analysis: null,
+    statusMessage: "",
+
     analysisFrame: {
       segment: null,
       tatumProgress: 0,
@@ -117,18 +111,14 @@ export function createInitialState(
     },
     styleProfile: initialStyle,
 
-    albumArt: null,
-    albumArtUrl: "",
-    priorMode: mode,
-
-    pitchHue: 0,
-    targetPitchHue: 0,
-    pitchSaturation: 0.5,
+    pitchHue: initialStyle.hue,
+    targetPitchHue: initialStyle.hue,
+    pitchSaturation: initialStyle.saturation,
 
     cols,
     rows,
     startTime: Date.now(),
     numBars,
-    scrollHistory: new Float32Array(cols),
+    modeData: {},
   };
 }

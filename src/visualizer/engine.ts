@@ -2,73 +2,58 @@
  * Visualizer engine.
  *
  * Coordinates:
- *   - Audio frame intake → DSP pipeline
- *   - Spotify metadata polling (1 Hz)
- *   - Render loop (target 30 FPS)
- *   - Keyboard input actions
+ *   - Analyzer frame intake → visual state
+ *   - Desktop player metadata polling
+ *   - Render loop
+ *   - Keyboard transport controls
  */
 
-import type { AudioSource } from "../audio/AudioSource.js";
-import { computeMagnitudeSpectrum } from "../dsp/fft.js";
-import { computeBuckets } from "../dsp/buckets.js";
+import type { AnalysisSource } from "../analysis/AnalysisSource.js";
 import { smoothBuckets, smoothValue, DEFAULT_BAR_SMOOTHING, DEFAULT_ENERGY_SMOOTHING } from "../dsp/smoothing.js";
-import { extractFeatures } from "../dsp/features.js";
 import { createInitialState } from "./state.js";
 import type { VisState, VisMode } from "./state.js";
-import { renderWavefield } from "./modes/wavefield.js";
-import { renderScroll, pushScrollHistory } from "./modes/scroll.js";
-import { renderSpectrum } from "./modes/spectrum.js";
+import { getVisualizerMode, VISUALIZER_MODE_ORDER } from "./modes/index.js";
 import { Renderer } from "../ui/renderer.js";
 import { buildTheme } from "../ui/theme.js";
 import { computeLayout, isTooSmall, tooSmallMessage } from "../ui/layout.js";
 import { renderProgressBar } from "../ui/progressBar.js";
-import { formatSeconds, padRight, padLeft, truncateMiddle } from "../ui/format.js";
+import { formatSeconds, padLeft, padRight, truncateMiddle } from "../ui/format.js";
 import { enterAlternateScreen, exitAlternateScreen, getTerminalSize } from "../ui/AppScreen.js";
 import { startInput, stopInput } from "../ui/input.js";
 import type { Action } from "../ui/input.js";
-import * as spotify from "../spotify/client.js";
-import { SpotifyRateLimitError } from "../spotify/client.js";
-import {
-  buildAnalysisFrame,
-  inferStyleProfile,
-  smoothStyleProfile,
-} from "../spotify/styleProfile.js";
+import type { PlayerBackend } from "../player/types.js";
 import { onCleanup } from "../utils/cleanup.js";
-import { fetchImageBuffer } from "../album/fetcher.js";
-import { convertToAscii } from "../album/converter.js";
-import { getCached, setCached } from "../album/cache.js";
-import { renderAlbumArt } from "./modes/albumArt.js";
 import { computePitchHue, lerpCircularHue } from "./pitchPalette.js";
+import { deriveMotionFrame, derivePitchFromBars, deriveSignalStyle } from "./signalStyle.js";
+import { smoothStyleProfile } from "../spotify/styleProfile.js";
 
 export interface EngineOptions {
   mode: VisMode;
   numBars: number;
   fps: number;
-  sampleRate: number;
   asciiSafe: boolean;
   noColor: boolean;
 }
 
 export class VisualizerEngine {
-  private static readonly PLAYING_POLL_MS = 5_000;
-  private static readonly IDLE_POLL_MS = 10_000;
-  private static readonly RETRY_POLL_MS = 1_000;
+  private static readonly PLAYING_POLL_MS = 2_000;
+  private static readonly IDLE_POLL_MS = 5_000;
 
-  private audio: AudioSource;
-  private opts: EngineOptions;
+  private readonly player: PlayerBackend;
+  private readonly analysis: AnalysisSource;
+  private readonly opts: EngineOptions;
   private state: VisState;
   private renderer!: Renderer;
   private theme = buildTheme(false, true);
-  private peak = { value: 1e-6 };
   private running = false;
   private renderTimer: ReturnType<typeof setInterval> | null = null;
-  private spotifyTimer: ReturnType<typeof setTimeout> | null = null;
-  private spotifyPollInFlight = false;
-  private spotifyBackoffUntil = 0;
+  private playerTimer: ReturnType<typeof setTimeout> | null = null;
+  private playerPollInFlight = false;
   private lastFrameMs = 0;
 
-  constructor(audio: AudioSource, opts: EngineOptions) {
-    this.audio = audio;
+  constructor(player: PlayerBackend, analysis: AnalysisSource, opts: EngineOptions) {
+    this.player = player;
+    this.analysis = analysis;
     this.opts = opts;
 
     const { cols, rows } = getTerminalSize();
@@ -76,14 +61,14 @@ export class VisualizerEngine {
   }
 
   async start(): Promise<void> {
-    this.running = true;
-    this.theme = buildTheme(
-      this.opts.asciiSafe,
-      !this.opts.noColor,
-      this.state.styleProfile
-    );
+    const availability = await this.player.isAvailable();
+    if (!availability.available) {
+      throw new Error(availability.message || "Desktop player backend unavailable.");
+    }
 
-    // Set up terminal
+    this.running = true;
+    this.theme = buildTheme(this.opts.asciiSafe, !this.opts.noColor, this.state.styleProfile);
+
     enterAlternateScreen();
     onCleanup(() => this.stop());
 
@@ -92,38 +77,26 @@ export class VisualizerEngine {
     this.state.cols = cols;
     this.state.rows = rows;
 
-    // Handle terminal resize
     process.stdout.on("resize", () => {
       const { cols: c, rows: r } = getTerminalSize();
       this.renderer.resize(c, r);
       this.state.cols = c;
       this.state.rows = r;
-      this.state.scrollHistory = new Float32Array(c);
-      // Force art reconversion at new size on next poll
-      if (this.state.albumArt && this.state.albumArt.cols !== c) {
-        this.state.albumArtUrl = "";
-        this.state.albumArt = null;
-      }
     });
 
-    // Wire audio frames into DSP pipeline
-    this.audio.onFrame((frame) => {
+    this.analysis.onFrame((frame) => {
       if (!this.running) return;
-      this.processAudioFrame(frame);
+      this.processAnalysisFrame(frame);
     });
 
-    // Start audio capture
-    await this.audio.start();
+    await this.analysis.start();
 
-    // Kick off Spotify poll immediately
     this.lastFrameMs = Date.now();
-    this.scheduleSpotifyPoll(0);
+    this.schedulePlayerPoll(0);
 
-    // Render loop
-    const frameMs = Math.round(1000 / this.opts.fps);
+    const frameMs = Math.max(16, Math.round(1000 / this.opts.fps));
     this.renderTimer = setInterval(() => this.renderFrame(), frameMs);
 
-    // Keyboard input
     startInput((action) => void this.handleAction(action));
   }
 
@@ -132,315 +105,162 @@ export class VisualizerEngine {
     this.running = false;
 
     if (this.renderTimer) clearInterval(this.renderTimer);
-    if (this.spotifyTimer) clearInterval(this.spotifyTimer);
+    if (this.playerTimer) clearTimeout(this.playerTimer);
     this.renderTimer = null;
-    this.spotifyTimer = null;
+    this.playerTimer = null;
 
     stopInput();
-    await this.audio.stop();
+    await this.analysis.stop();
     exitAlternateScreen();
   }
 
-  // ---------------------------------------------------------------------------
-  // DSP
-  // ---------------------------------------------------------------------------
-
-  private processAudioFrame(frame: Float32Array): void {
-    const mags = computeMagnitudeSpectrum(frame);
-
-    // Compute raw buckets and smooth them
-    const raw = computeBuckets(mags, this.opts.numBars, this.opts.sampleRate, this.peak);
-
-    if (this.state.rawBuckets.length !== raw.length) {
-      this.state.rawBuckets = new Float32Array(raw.length);
-      this.state.smoothedBuckets = new Float32Array(raw.length);
+  private processAnalysisFrame(
+    frame: import("../analysis/AnalysisSource.js").AnalysisFrame
+  ): void {
+    if (this.state.rawBuckets.length !== frame.bars.length) {
+      this.state.rawBuckets = new Float32Array(frame.bars.length);
+      this.state.smoothedBuckets = new Float32Array(frame.bars.length);
     }
-    this.state.rawBuckets.set(raw);
-    smoothBuckets(this.state.smoothedBuckets, raw, DEFAULT_BAR_SMOOTHING);
 
-    // Energy features
-    const features = extractFeatures(mags, this.opts.sampleRate);
-    this.state.low = smoothValue(this.state.low, features.low, DEFAULT_ENERGY_SMOOTHING);
-    this.state.mid = smoothValue(this.state.mid, features.mid, DEFAULT_ENERGY_SMOOTHING);
-    this.state.high = smoothValue(this.state.high, features.high, DEFAULT_ENERGY_SMOOTHING);
-    this.state.amplitude = smoothValue(this.state.amplitude, features.rms, DEFAULT_ENERGY_SMOOTHING);
-    this.state.pulse = features.pulse; // don't smooth pulse — it should be sharp
-    this.state.styleProfile = smoothStyleProfile(
-      this.state.styleProfile,
-      {
-        ...this.state.styleProfile,
-        glitch: Math.min(
-          1,
-          this.state.styleProfile.glitch * 0.92 +
-            features.high * 0.03 +
-            features.pulse * 0.09
-        ),
-        aggression: Math.min(
-          1,
-          this.state.styleProfile.aggression * 0.94 +
-            features.low * 0.03 +
-            features.pulse * 0.06
-        ),
-        density: Math.min(
-          1,
-          this.state.styleProfile.density * 0.95 + features.rms * 0.04
-        ),
-        groove: Math.min(
-          1,
-          this.state.styleProfile.groove * 0.96 +
-            features.low * 0.02 +
-            features.mid * 0.01
-        ),
-      },
-      0.08
+    this.state.rawBuckets.set(frame.bars);
+    smoothBuckets(this.state.smoothedBuckets, frame.bars, DEFAULT_BAR_SMOOTHING);
+
+    this.state.low = smoothValue(this.state.low, frame.low, DEFAULT_ENERGY_SMOOTHING);
+    this.state.mid = smoothValue(this.state.mid, frame.mid, DEFAULT_ENERGY_SMOOTHING);
+    this.state.high = smoothValue(this.state.high, frame.high, DEFAULT_ENERGY_SMOOTHING);
+    this.state.amplitude = smoothValue(
+      this.state.amplitude,
+      frame.amplitude,
+      DEFAULT_ENERGY_SMOOTHING
     );
+    this.state.pulse = frame.pulse;
+
+    const pitch = derivePitchFromBars(frame.bars);
+    if (pitch) {
+      this.state.targetPitchHue = pitch.hue;
+      this.state.pitchSaturation = pitch.saturation;
+    } else {
+      const syntheticPitch = computePitchHue([
+        frame.low,
+        frame.low * 0.6,
+        frame.mid,
+        frame.mid * 0.7,
+        frame.high,
+        frame.high * 0.8,
+        frame.high * 0.6,
+        frame.mid * 0.6,
+        frame.low * 0.4,
+        frame.low * 0.8,
+        frame.mid * 0.4,
+        frame.high * 0.3,
+      ]);
+      if (syntheticPitch) {
+        this.state.targetPitchHue = syntheticPitch.hue;
+        this.state.pitchSaturation = syntheticPitch.saturation;
+      }
+    }
+
+    const nextStyle = deriveSignalStyle({
+      low: this.state.low,
+      mid: this.state.mid,
+      high: this.state.high,
+      amplitude: this.state.amplitude,
+      pulse: this.state.pulse,
+      hue: this.state.targetPitchHue,
+      saturation: this.state.pitchSaturation,
+    });
+    this.state.styleProfile = smoothStyleProfile(this.state.styleProfile, nextStyle, 0.12);
   }
 
-  // ---------------------------------------------------------------------------
-  // Spotify polling
-  // ---------------------------------------------------------------------------
-
-  private async pollSpotify(): Promise<void> {
+  private async pollPlayer(): Promise<void> {
     try {
-      const playback = await spotify.getCurrentPlayback();
-      if (!playback || !playback.item) {
-        this.state.trackName   = "";
-        this.state.trackId     = "";
-        this.state.artistName  = "";
-        this.state.albumName   = "";
-        this.state.deviceName  = playback?.device?.name ?? "";
-        this.state.isPlaying   = false;
-        this.state.progressMs  = 0;
-        this.state.durationMs  = 0;
-        this.state.spotifyStatus = "No active Spotify playback";
-        this.state.analysis = null;
-        this.state.albumArtUrl = "";
-        this.state.albumArt    = null;
-        this.state.targetPitchHue = 0;
-        this.state.pitchSaturation = 0.5;
+      const playback = await this.player.getState();
+      if (!playback) {
+        this.state.trackName = "";
+        this.state.artistName = "";
+        this.state.albumName = "";
+        this.state.appName = "Spotify";
+        this.state.isPlaying = false;
+        this.state.progressMs = 0;
+        this.state.durationMs = 0;
+        this.state.statusMessage = "Open Spotify Desktop and start playback.";
         return;
       }
 
-      const previousTrackId = this.state.trackId;
-      this.state.trackId    = playback.item.id;
-      this.state.trackName  = playback.item.name;
-      this.state.artistName = playback.item.artists.map((a) => a.name).join(", ");
-      this.state.albumName  = playback.item.album.name;
-      this.state.deviceName = playback.device?.name ?? "";
-      this.state.isPlaying  = playback.is_playing;
-      this.state.progressMs = playback.progress_ms ?? 0;
-      this.state.durationMs = playback.item.duration_ms;
-      this.state.spotifyStatus = "";
-
-      if (playback.item.id !== previousTrackId) {
-        const artistIds = playback.item.artists.map((artist) => artist.id).filter(Boolean);
-        const [artists, features, analysis] = await Promise.all([
-          spotify.getArtists(artistIds),
-          spotify.getAudioFeatures(playback.item.id),
-          spotify.getAudioAnalysis(playback.item.id),
-        ]);
-
-        this.state.analysis = analysis;
-        this.state.currentSegmentIndex = 0;
-        this.state.currentBeatIndex = 0;
-        this.state.currentTatumIndex = 0;
-        this.state.currentSectionIndex = 0;
-        this.state.styleProfile = inferStyleProfile({
-          artists,
-          features,
-          analysis,
-        });
-      }
-
-      this.syncAnalysisFrame();
-
-      // Album art: use the smallest image (last in array, Spotify orders largest→smallest)
-      const images = playback.item.album.images;
-      const imageUrl = images.length > 0 ? images[images.length - 1].url : "";
-
-      if (imageUrl && imageUrl !== this.state.albumArtUrl) {
-        this.state.albumArtUrl = imageUrl;
-
-        const cached = getCached(playback.item.id);
-        if (cached && cached.cols === this.state.cols) {
-          this.state.albumArt = cached;
-        } else {
-          const trackId = playback.item.id;
-          const cols    = this.state.cols;
-          const noColor = this.opts.noColor;
-          const layout  = computeLayout(cols, this.state.rows);
-          const vizH    = layout.visualizer.height;
-
-          fetchImageBuffer(imageUrl)
-            .then((buf) => convertToAscii(buf, trackId, cols, vizH, noColor))
-            .then((art) => {
-              setCached(trackId, art);
-              if (this.state.albumArtUrl === imageUrl) {
-                this.state.albumArt = art;
-              }
-            })
-            .catch(() => {
-              // Network/decode failure — no art, no crash
-            });
-        }
-      }
+      this.state.trackName = playback.trackName;
+      this.state.artistName = playback.artistName;
+      this.state.albumName = playback.albumName;
+      this.state.appName = playback.appName;
+      this.state.isPlaying = playback.isPlaying;
+      this.state.progressMs = playback.progressMs;
+      this.state.durationMs = playback.durationMs;
+      this.state.statusMessage = "";
     } catch (err) {
-      if (err instanceof SpotifyRateLimitError) {
-        this.spotifyBackoffUntil = Date.now() + err.retryAfterMs;
-        this.state.spotifyStatus = err.message;
-        return;
-      }
-      const msg = err instanceof Error ? err.message : "Spotify metadata unavailable";
+      const msg = err instanceof Error ? err.message : String(err);
       this.state.trackName = "";
       this.state.artistName = "";
       this.state.albumName = "";
-      this.state.deviceName = "";
       this.state.isPlaying = false;
       this.state.progressMs = 0;
       this.state.durationMs = 0;
-      this.state.trackId = "";
-      this.state.analysis = null;
-      this.state.albumArtUrl = "";
-      this.state.albumArt = null;
-      this.state.spotifyStatus = msg;
+      this.state.statusMessage = msg;
     }
   }
 
-  private scheduleSpotifyPoll(delayMs: number): void {
+  private schedulePlayerPoll(delayMs: number): void {
     if (!this.running) return;
-    if (this.spotifyTimer) {
-      clearTimeout(this.spotifyTimer);
-    }
-    this.spotifyTimer = setTimeout(
-      () => void this.runSpotifyPollLoop(),
-      Math.max(0, delayMs)
-    );
+    if (this.playerTimer) clearTimeout(this.playerTimer);
+    this.playerTimer = setTimeout(() => void this.runPlayerPollLoop(), Math.max(0, delayMs));
   }
 
-  private nextSpotifyPollDelay(): number {
-    const now = Date.now();
-    if (now < this.spotifyBackoffUntil) {
-      return this.spotifyBackoffUntil - now;
-    }
+  private nextPlayerPollDelay(): number {
     return this.state.isPlaying
       ? VisualizerEngine.PLAYING_POLL_MS
       : VisualizerEngine.IDLE_POLL_MS;
   }
 
-  private async runSpotifyPollLoop(): Promise<void> {
+  private async runPlayerPollLoop(): Promise<void> {
     if (!this.running) return;
 
-    const now = Date.now();
-    if (now < this.spotifyBackoffUntil) {
-      this.scheduleSpotifyPoll(this.spotifyBackoffUntil - now);
+    if (this.playerPollInFlight) {
+      this.schedulePlayerPoll(500);
       return;
     }
 
-    if (this.spotifyPollInFlight) {
-      this.scheduleSpotifyPoll(VisualizerEngine.RETRY_POLL_MS);
-      return;
-    }
-
-    this.spotifyPollInFlight = true;
+    this.playerPollInFlight = true;
     try {
-      await this.pollSpotify();
+      await this.pollPlayer();
     } finally {
-      this.spotifyPollInFlight = false;
+      this.playerPollInFlight = false;
       if (this.running) {
-        this.scheduleSpotifyPoll(this.nextSpotifyPollDelay());
+        this.schedulePlayerPoll(this.nextPlayerPollDelay());
       }
     }
   }
 
-  private requestImmediateSpotifyPoll(): void {
-    this.spotifyBackoffUntil = 0;
-    this.scheduleSpotifyPoll(0);
+  private requestImmediatePlayerPoll(): void {
+    this.schedulePlayerPoll(0);
   }
-
-  private syncAnalysisFrame(): void {
-    const { analysis, progressMs } = this.state;
-    if (!analysis) {
-      return;
-    }
-
-    const playbackSeconds = progressMs / 1000;
-    const advanceIndex = <T extends { start: number }>(
-      collection: T[],
-      currentIndex: number
-    ): number => {
-      if (collection.length === 0) return 0;
-      let index = Math.max(0, Math.min(currentIndex, collection.length - 1));
-      while (index + 1 < collection.length && playbackSeconds >= collection[index + 1].start) {
-        index += 1;
-      }
-      while (index > 0 && playbackSeconds < collection[index].start) {
-        index -= 1;
-      }
-      return index;
-    };
-
-    this.state.currentSegmentIndex = advanceIndex(
-      analysis.segments,
-      this.state.currentSegmentIndex
-    );
-    this.state.currentBeatIndex = advanceIndex(
-      analysis.beats,
-      this.state.currentBeatIndex
-    );
-    this.state.currentTatumIndex = advanceIndex(
-      analysis.tatums,
-      this.state.currentTatumIndex
-    );
-    this.state.currentSectionIndex = advanceIndex(
-      analysis.sections,
-      this.state.currentSectionIndex
-    );
-
-    this.state.analysisFrame = buildAnalysisFrame({
-      analysis,
-      progressMs,
-      currentSegmentIndex: this.state.currentSegmentIndex,
-      currentBeatIndex: this.state.currentBeatIndex,
-      currentTatumIndex: this.state.currentTatumIndex,
-      currentSectionIndex: this.state.currentSectionIndex,
-    });
-
-    // Update pitch hue target from current segment
-    const seg = analysis.segments[this.state.currentSegmentIndex];
-    if (seg?.pitches?.length) {
-      const pitchResult = computePitchHue(seg.pitches);
-      if (pitchResult !== null) {
-        this.state.targetPitchHue = pitchResult.hue;
-        this.state.pitchSaturation = pitchResult.saturation;
-      }
-      // if null (all-zero pitches), hold previous values
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
 
   private renderFrame(): void {
     if (!this.running) return;
+
     const now = Date.now();
     if (this.lastFrameMs > 0 && this.state.isPlaying) {
       const elapsedMs = now - this.lastFrameMs;
-      this.state.progressMs = Math.min(
-        this.state.durationMs,
-        this.state.progressMs + elapsedMs
-      );
+      this.state.progressMs = Math.min(this.state.durationMs, this.state.progressMs + elapsedMs);
     }
     this.lastFrameMs = now;
-    this.syncAnalysisFrame();
-    this.theme = buildTheme(
-      this.opts.asciiSafe,
-      !this.opts.noColor,
-      this.state.styleProfile
+
+    this.state.analysisFrame = deriveMotionFrame(now - this.state.startTime, this.state.pulse, this.state.isPlaying);
+    this.state.pitchHue = lerpCircularHue(
+      this.state.pitchHue,
+      this.state.targetPitchHue,
+      0.08
     );
+    this.theme = buildTheme(this.opts.asciiSafe, !this.opts.noColor, this.state.styleProfile);
 
     const { cols, rows } = { cols: this.state.cols, rows: this.state.rows };
-
     this.renderer.clear();
 
     if (isTooSmall(cols, rows)) {
@@ -452,80 +272,46 @@ export class VisualizerEngine {
     const layout = computeLayout(cols, rows);
     const s = this.state;
 
-    // --- Header ---
     const hasTrack = s.trackName.length > 0;
-    const deviceLabel = s.deviceName ? `[${s.deviceName}]` : "";
-    const DEVICE_PAD = deviceLabel.length + 1;
+    const appLabel = `[${s.appName}]`;
+    const appPad = appLabel.length + 1;
 
     if (hasTrack) {
-      // Thumbnail (4×2 icon) — left of track name
-      if (s.albumArt) {
-        this.renderer.write(0, 0, s.albumArt.thumbnail[0] ?? "    ");
-        this.renderer.write(0, 1, s.albumArt.thumbnail[1] ?? "    ");
-      } else {
-        this.renderer.write(0, 0, "    ");
-        this.renderer.write(0, 1, "    ");
-      }
-
       const titleFull = `${s.trackName}  —  ${s.artistName}`;
-      const maxTitleW = Math.max(1, cols - DEVICE_PAD - 6);
-      const titleLine = "  " + truncateMiddle(titleFull, maxTitleW - 2);
-      this.renderer.write(5, 0, padRight(titleLine, cols - DEVICE_PAD - 5));
-      this.renderer.write(cols - DEVICE_PAD, 0, padLeft(deviceLabel, DEVICE_PAD));
+      const maxTitleW = Math.max(1, cols - appPad - 2);
+      this.renderer.write(0, 0, padRight(truncateMiddle(titleFull, maxTitleW), cols - appPad));
+      this.renderer.write(cols - appPad, 0, padLeft(appLabel, appPad));
 
       const stateStr = s.isPlaying ? "Playing" : "Paused";
-      const elapsed  = formatSeconds(s.progressMs / 1000);
-      const total    = formatSeconds(s.durationMs / 1000);
+      const elapsed = formatSeconds(s.progressMs / 1000);
+      const total = formatSeconds(s.durationMs / 1000);
       const timePart = `${elapsed} / ${total}`;
       const stateLine =
-        `  State: ${stateStr}   Style: ${truncateMiddle(s.styleProfile.label, 24)}   Pitch: ${s.styleProfile.dominantPitchLabel}`;
-      this.renderer.write(5, 1, padRight(stateLine, cols - timePart.length - 6));
+        `State: ${stateStr}   Album: ${truncateMiddle(s.albumName, Math.max(8, cols - timePart.length - 20))}`;
+      this.renderer.write(0, 1, padRight(stateLine, Math.max(0, cols - timePart.length - 1)));
       this.renderer.write(cols - timePart.length, 1, timePart);
     } else {
       const title = truncateMiddle(
-        s.spotifyStatus || "No active Spotify playback",
-        Math.max(1, cols - 18)
+        s.statusMessage || "Open Spotify Desktop and start playback.",
+        Math.max(1, cols - 12)
       );
-      this.renderer.write(0, 0, `  Spotify: ${title}`);
-      this.renderer.write(0, 1, "  State: Idle");
+      this.renderer.write(0, 0, `Spotify: ${title}`);
+      this.renderer.write(0, 1, "State: Idle");
     }
 
-    // --- Progress bar ---
-    const progress =
-      s.durationMs > 0 ? s.progressMs / s.durationMs : 0;
+    const progress = s.durationMs > 0 ? s.progressMs / s.durationMs : 0;
     const barWidth = Math.min(60, cols - 4);
-    const bar = renderProgressBar(progress, barWidth);
-    this.renderer.writeCenter(layout.progress.y, bar);
+    this.renderer.writeCenter(layout.progress.y, renderProgressBar(progress, barWidth));
 
-    // --- Visualizer ---
-    // Smooth pitch hue toward target (lerp factor 0.08 ≈ 0.7 s half-life at 30 fps)
-    this.state.pitchHue = lerpCircularHue(
-      this.state.pitchHue,
-      this.state.targetPitchHue,
-      0.08
-    );
-    pushScrollHistory(s, layout.visualizer.width);
-    if (s.mode === "wavefield") {
-      renderWavefield(s, this.renderer, layout.visualizer, this.theme);
-    } else if (s.mode === "scroll") {
-      renderScroll(s, this.renderer, layout.visualizer, this.theme);
-    } else if (s.mode === "album-art") {
-      renderAlbumArt(s, this.renderer, layout.visualizer, this.theme);
-    } else {
-      renderSpectrum(s, this.renderer, layout.visualizer, this.theme);
-    }
+    const mode = getVisualizerMode(s.mode);
+    mode.prepare?.(s, layout.visualizer);
+    mode.render(s, this.renderer, layout.visualizer, this.theme);
 
-    // --- Footer ---
     const footer =
-      "[space] play/pause   [n] next   [p] prev   [s] mode   [a] art   [q] quit";
+      "[space] play/pause   [n] next   [p] prev   [s] mode   [r] refresh   [q] quit";
     this.renderer.writeCenter(layout.footer.y, footer);
-
     this.renderer.flush();
   }
-
-  // ---------------------------------------------------------------------------
-  // Input handling
-  // ---------------------------------------------------------------------------
 
   private async handleAction(action: Action): Promise<void> {
     try {
@@ -535,43 +321,34 @@ export class VisualizerEngine {
           process.exit(0);
           break;
         case "toggle_play":
-          if (this.state.isPlaying) await spotify.pause();
-          else await spotify.play();
-          this.requestImmediateSpotifyPoll();
+          if (this.state.isPlaying) await this.player.pause();
+          else await this.player.play();
+          this.requestImmediatePlayerPoll();
           break;
         case "next":
-          await spotify.nextTrack();
-          this.requestImmediateSpotifyPoll();
+          await this.player.next();
+          this.requestImmediatePlayerPoll();
           break;
         case "prev":
-          await spotify.previousTrack();
-          this.requestImmediateSpotifyPoll();
+          await this.player.previous();
+          this.requestImmediatePlayerPoll();
           break;
         case "switch_mode": {
-          if (this.state.mode === "album-art") break;
-          const modes = ["wavefield", "scroll", "spectrum"] as const;
-          const idx = modes.indexOf(this.state.mode as typeof modes[number]);
-          this.state.mode = modes[(idx + 1) % modes.length];
+          const idx = VISUALIZER_MODE_ORDER.indexOf(this.state.mode);
+          this.state.mode = VISUALIZER_MODE_ORDER[(idx + 1) % VISUALIZER_MODE_ORDER.length];
           break;
         }
         case "refresh":
-          this.requestImmediateSpotifyPoll();
-          break;
-        case "toggle_album_art":
-          if (this.state.mode !== "album-art") {
-            if (this.state.albumArt) {
-              this.state.priorMode = this.state.mode;
-              this.state.mode = "album-art";
-            }
-          } else {
-            this.state.mode = this.state.priorMode;
-          }
+          this.requestImmediatePlayerPoll();
           break;
       }
     } catch (err) {
-      // Show error briefly — don't crash
       const msg = err instanceof Error ? err.message : String(err);
-      this.renderer.writeCenter(this.state.rows - 2, `  ERR: ${msg.slice(0, this.state.cols - 8)}  `);
+      this.state.statusMessage = msg;
+      this.renderer.writeCenter(
+        this.state.rows - 2,
+        `  ERR: ${msg.slice(0, Math.max(1, this.state.cols - 8))}  `
+      );
     }
   }
 }

@@ -16,19 +16,32 @@ import type { Theme } from "../../ui/theme.js";
 import type { Region } from "../../ui/layout.js";
 import { pitchAnsiColor } from "../pitchPalette.js";
 
+interface ScrollModeData {
+  history: Float32Array;
+}
+
+function getScrollModeData(state: VisState, width: number): ScrollModeData {
+  const existing = state.modeData.scroll as ScrollModeData | undefined;
+  if (existing && existing.history.length === width) {
+    return existing;
+  }
+
+  const next: ScrollModeData = {
+    history: new Float32Array(width),
+  };
+  state.modeData.scroll = next;
+  return next;
+}
+
 /**
  * Advance the scroll history buffer one step.
  * Shifts existing values left and appends the current amplitude at the
  * right edge. Call once per render frame before renderScroll.
  */
-export function pushScrollHistory(state: VisState, width: number): void {
-  // Resize if the terminal width changed
-  if (state.scrollHistory.length !== width) {
-    state.scrollHistory = new Float32Array(width);
-    return;
-  }
-  state.scrollHistory.copyWithin(0, 1);
-  state.scrollHistory[width - 1] = state.amplitude;
+export function prepareScroll(state: VisState, width: number): void {
+  const data = getScrollModeData(state, width);
+  data.history.copyWithin(0, 1);
+  data.history[width - 1] = state.amplitude;
 }
 
 export function renderScroll(
@@ -41,17 +54,18 @@ export function renderScroll(
   const H = region.height;
   const cy = Math.floor(H / 2);
   const halfH = Math.max(1, cy - 1); // leave 1-row margin top and bottom
+  const data = getScrollModeData(state, W);
 
   const ascii = !theme.colorEnabled || theme.palette.length <= 5;
 
   for (let col = 0; col < W; col++) {
-    const amp = state.scrollHistory[col] ?? 0;
+    const amp = data.history[col] ?? 0;
     const barH = Math.round(amp * halfH);
 
     if (barH === 0) {
       // Centre tick so silence isn't completely blank
       const ch = ascii ? "-" : "\u2014";
-      renderer.write(col, region.y + cy, ch);
+      renderer.writeCell(col, region.y + cy, ch);
       continue;
     }
 
@@ -77,7 +91,7 @@ export function renderScroll(
         cell = pitchAnsiColor(state.pitchHue, state.pitchSaturation, intensity) + ch + theme.reset;
       }
 
-      renderer.write(col, region.y + row, cell);
+      renderer.writeCell(col, region.y + row, cell);
     }
   }
 }

@@ -1,7 +1,6 @@
-import type { AsciiArt } from "../album/converter.js";
-import type { SpotifyAudioAnalysis } from "../spotify/types.js";
-import type { AnalysisFrame, StyleProfile } from "../spotify/styleProfile.js";
-export type VisMode = "wavefield" | "scroll" | "spectrum" | "album-art";
+import type { AnalysisFrame as MotionFrame, StyleProfile } from "../spotify/styleProfile.js";
+export declare const VIS_MODE_IDS: readonly ["wavefield", "scroll", "spectrum", "skyline"];
+export type VisMode = typeof VIS_MODE_IDS[number];
 export interface VisState {
     mode: VisMode;
     smoothedBuckets: Float32Array;
@@ -12,29 +11,23 @@ export interface VisState {
     amplitude: number;
     pulse: number;
     trackName: string;
-    trackId: string;
     artistName: string;
     albumName: string;
-    deviceName: string;
+    appName: string;
     isPlaying: boolean;
     progressMs: number;
     durationMs: number;
-    spotifyStatus: string;
-    currentSegmentIndex: number;
-    currentBeatIndex: number;
-    currentTatumIndex: number;
-    currentSectionIndex: number;
-    analysis: SpotifyAudioAnalysis | null;
-    analysisFrame: AnalysisFrame;
+    statusMessage: string;
+    analysisFrame: MotionFrame;
     styleProfile: StyleProfile;
-    albumArt: AsciiArt | null;
-    albumArtUrl: string;
-    priorMode: VisMode;
+    pitchHue: number;
+    targetPitchHue: number;
+    pitchSaturation: number;
     cols: number;
     rows: number;
     startTime: number;
     numBars: number;
-    scrollHistory: Float32Array;
+    modeData: Record<string, unknown>;
 }
 export declare function createInitialState(mode: VisMode, numBars: number, cols: number, rows: number): VisState;
 //# sourceMappingURL=state.d.ts.map
