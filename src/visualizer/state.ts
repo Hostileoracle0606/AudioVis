@@ -8,6 +8,8 @@ export const VIS_MODE_IDS = [
   "scroll",
   "spectrum",
   "skyline",
+  "fire",
+  "tunnel",
 ] as const;
 
 export type VisMode = typeof VIS_MODE_IDS[number];

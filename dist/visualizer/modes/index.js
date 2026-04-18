@@ -4,9 +4,11 @@ exports.VISUALIZER_MODE_ORDER = void 0;
 exports.getVisualizerMode = getVisualizerMode;
 exports.isVisualizerMode = isVisualizerMode;
 const state_js_1 = require("../state.js");
+const fire_js_1 = require("./fire.js");
 const scroll_js_1 = require("./scroll.js");
 const skyline_js_1 = require("./skyline.js");
 const spectrum_js_1 = require("./spectrum.js");
+const tunnel_js_1 = require("./tunnel.js");
 const wavefield_js_1 = require("./wavefield.js");
 const MODE_DEFINITIONS = {
     wavefield: {
@@ -29,6 +31,18 @@ const MODE_DEFINITIONS = {
         id: "skyline",
         label: "Skyline",
         render: skyline_js_1.renderSkyline,
+    },
+    fire: {
+        id: "fire",
+        label: "Fire",
+        prepare: fire_js_1.prepareFire,
+        render: fire_js_1.renderFire,
+    },
+    tunnel: {
+        id: "tunnel",
+        label: "Tunnel",
+        prepare: tunnel_js_1.prepareTunnel,
+        render: tunnel_js_1.renderTunnel,
     },
 };
 exports.VISUALIZER_MODE_ORDER = state_js_1.VIS_MODE_IDS;

@@ -4,12 +4,25 @@ import { Renderer } from "../../ui/renderer.js";
 import { buildTheme } from "../../ui/theme.js";
 import { createInitialState } from "../state.js";
 import { getVisualizerMode, isVisualizerMode, VISUALIZER_MODE_ORDER } from "./index.js";
+import { prepareFire, renderFire } from "./fire.js";
 import { renderSkyline } from "./skyline.js";
+import { prepareTunnel, renderTunnel } from "./tunnel.js";
 
-test("visualizer mode registry includes skyline", () => {
+test("visualizer mode registry includes skyline, fire, and tunnel", () => {
   assert.equal(isVisualizerMode("skyline"), true);
+  assert.equal(isVisualizerMode("fire"), true);
+  assert.equal(isVisualizerMode("tunnel"), true);
   assert.equal(getVisualizerMode("skyline").label, "Skyline");
-  assert.deepEqual(VISUALIZER_MODE_ORDER, ["wavefield", "scroll", "spectrum", "skyline"]);
+  assert.equal(getVisualizerMode("fire").label, "Fire");
+  assert.equal(getVisualizerMode("tunnel").label, "Tunnel");
+  assert.deepEqual(VISUALIZER_MODE_ORDER, [
+    "wavefield",
+    "scroll",
+    "spectrum",
+    "skyline",
+    "fire",
+    "tunnel",
+  ]);
 });
 
 test("renderSkyline produces ASCII buildings above the baseline", () => {
@@ -36,4 +49,54 @@ test("renderSkyline produces ASCII buildings above the baseline", () => {
   assert.match(frame, /_/);
   assert.match(frame, /\|/);
   assert.match(frame, /#/);
+});
+
+test("fire mode renders hot ASCII cells", () => {
+  const state = createInitialState("fire", 10, 20, 10);
+  state.smoothedBuckets = new Float32Array([0.6, 0.72, 0.8, 0.9, 0.68, 0.74, 0.84, 0.7, 0.62, 0.58]);
+  state.low = 0.82;
+  state.mid = 0.5;
+  state.high = 0.66;
+  state.amplitude = 0.88;
+  state.pulse = 0.54;
+
+  const renderer = new Renderer(20, 10);
+  const theme = buildTheme(true, false, state.styleProfile);
+  const originalNow = Date.now;
+
+  Date.now = () => state.startTime + 960;
+  try {
+    prepareFire(state, { x: 0, y: 0, width: 20, height: 10 });
+    renderFire(state, renderer, { x: 0, y: 0, width: 20, height: 10 }, theme);
+  } finally {
+    Date.now = originalNow;
+  }
+
+  const frame = renderer.toFrameString().replace("\x1b[H", "");
+  assert.match(frame, /[@%#x:]/);
+});
+
+test("tunnel mode renders framed depth rings", () => {
+  const state = createInitialState("tunnel", 12, 24, 12);
+  state.low = 0.7;
+  state.mid = 0.55;
+  state.high = 0.62;
+  state.amplitude = 0.78;
+  state.pulse = 0.4;
+
+  const renderer = new Renderer(24, 12);
+  const theme = buildTheme(true, false, state.styleProfile);
+  const originalNow = Date.now;
+
+  Date.now = () => state.startTime + 1500;
+  try {
+    prepareTunnel(state, { x: 0, y: 0, width: 24, height: 12 });
+    renderTunnel(state, renderer, { x: 0, y: 0, width: 24, height: 12 }, theme);
+  } finally {
+    Date.now = originalNow;
+  }
+
+  const frame = renderer.toFrameString().replace("\x1b[H", "");
+  assert.match(frame, /[\/\\]/);
+  assert.match(frame, /[|\-]/);
 });

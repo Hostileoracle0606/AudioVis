@@ -2,9 +2,11 @@ import type { Region } from "../../ui/layout.js";
 import type { Renderer } from "../../ui/renderer.js";
 import type { Theme } from "../../ui/theme.js";
 import { VIS_MODE_IDS, type VisMode, type VisState } from "../state.js";
+import { prepareFire, renderFire } from "./fire.js";
 import { renderScroll, prepareScroll } from "./scroll.js";
 import { renderSkyline } from "./skyline.js";
 import { renderSpectrum } from "./spectrum.js";
+import { prepareTunnel, renderTunnel } from "./tunnel.js";
 import { renderWavefield } from "./wavefield.js";
 
 export interface VisualizerModeDefinition {
@@ -35,6 +37,18 @@ const MODE_DEFINITIONS: Record<VisMode, VisualizerModeDefinition> = {
     id: "skyline",
     label: "Skyline",
     render: renderSkyline,
+  },
+  fire: {
+    id: "fire",
+    label: "Fire",
+    prepare: prepareFire,
+    render: renderFire,
+  },
+  tunnel: {
+    id: "tunnel",
+    label: "Tunnel",
+    prepare: prepareTunnel,
+    render: renderTunnel,
   },
 };
 

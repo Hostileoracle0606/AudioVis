@@ -1,5 +1,5 @@
 import type { AnalysisFrame as MotionFrame, StyleProfile } from "../spotify/styleProfile.js";
-export declare const VIS_MODE_IDS: readonly ["wavefield", "scroll", "spectrum", "skyline"];
+export declare const VIS_MODE_IDS: readonly ["wavefield", "scroll", "spectrum", "skyline", "fire", "tunnel"];
 export type VisMode = typeof VIS_MODE_IDS[number];
 export interface VisState {
     mode: VisMode;

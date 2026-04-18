@@ -7,6 +7,8 @@ exports.VIS_MODE_IDS = [
     "scroll",
     "spectrum",
     "skyline",
+    "fire",
+    "tunnel",
 ];
 function createInitialState(mode, numBars, cols, rows) {
     const initialStyle = {
