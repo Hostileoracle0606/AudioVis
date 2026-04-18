@@ -307,9 +307,18 @@ export class VisualizerEngine {
     mode.prepare?.(s, layout.visualizer);
     mode.render(s, this.renderer, layout.visualizer, this.theme);
 
-    const footer =
+    const controls =
       "[space] play/pause   [n] next   [p] prev   [s] mode   [r] refresh   [q] quit";
-    this.renderer.writeCenter(layout.footer.y, footer);
+    const modeTag = `[mode: ${mode.label}]`;
+    if (cols >= controls.length + modeTag.length + 3) {
+      this.renderer.write(0, layout.footer.y, padRight(controls, cols - modeTag.length - 1));
+      this.renderer.write(cols - modeTag.length, layout.footer.y, modeTag);
+    } else {
+      this.renderer.writeCenter(
+        layout.footer.y,
+        truncateMiddle(`${controls}   ${modeTag}`, cols)
+      );
+    }
     this.renderer.flush();
   }
 

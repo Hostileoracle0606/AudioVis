@@ -253,8 +253,15 @@ class VisualizerEngine {
         const mode = (0, index_js_1.getVisualizerMode)(s.mode);
         mode.prepare?.(s, layout.visualizer);
         mode.render(s, this.renderer, layout.visualizer, this.theme);
-        const footer = "[space] play/pause   [n] next   [p] prev   [s] mode   [r] refresh   [q] quit";
-        this.renderer.writeCenter(layout.footer.y, footer);
+        const controls = "[space] play/pause   [n] next   [p] prev   [s] mode   [r] refresh   [q] quit";
+        const modeTag = `[mode: ${mode.label}]`;
+        if (cols >= controls.length + modeTag.length + 3) {
+            this.renderer.write(0, layout.footer.y, (0, format_js_1.padRight)(controls, cols - modeTag.length - 1));
+            this.renderer.write(cols - modeTag.length, layout.footer.y, modeTag);
+        }
+        else {
+            this.renderer.writeCenter(layout.footer.y, (0, format_js_1.truncateMiddle)(`${controls}   ${modeTag}`, cols));
+        }
         this.renderer.flush();
     }
     async handleAction(action) {

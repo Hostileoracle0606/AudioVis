@@ -6,15 +6,18 @@ import { createInitialState } from "../state.js";
 import { getVisualizerMode, isVisualizerMode, VISUALIZER_MODE_ORDER } from "./index.js";
 import { prepareFire, renderFire } from "./fire.js";
 import { renderSkyline } from "./skyline.js";
+import { renderTopographic } from "./topographic.js";
 import { prepareTunnel, renderTunnel } from "./tunnel.js";
 
-test("visualizer mode registry includes skyline, fire, and tunnel", () => {
+test("visualizer mode registry includes skyline, fire, tunnel, and topographic", () => {
   assert.equal(isVisualizerMode("skyline"), true);
   assert.equal(isVisualizerMode("fire"), true);
   assert.equal(isVisualizerMode("tunnel"), true);
+  assert.equal(isVisualizerMode("topographic"), true);
   assert.equal(getVisualizerMode("skyline").label, "Skyline");
   assert.equal(getVisualizerMode("fire").label, "Fire");
   assert.equal(getVisualizerMode("tunnel").label, "Tunnel");
+  assert.equal(getVisualizerMode("topographic").label, "Topographic");
   assert.deepEqual(VISUALIZER_MODE_ORDER, [
     "wavefield",
     "scroll",
@@ -22,6 +25,7 @@ test("visualizer mode registry includes skyline, fire, and tunnel", () => {
     "skyline",
     "fire",
     "tunnel",
+    "topographic",
   ]);
 });
 
@@ -99,4 +103,28 @@ test("tunnel mode renders framed depth rings", () => {
   const frame = renderer.toFrameString().replace("\x1b[H", "");
   assert.match(frame, /[\/\\]/);
   assert.match(frame, /[|\-]/);
+});
+
+test("topographic mode renders contour lines", () => {
+  const state = createInitialState("topographic", 12, 28, 12);
+  state.smoothedBuckets = new Float32Array([0.25, 0.42, 0.6, 0.7, 0.86, 0.78, 0.72, 0.56, 0.48, 0.36, 0.28, 0.22]);
+  state.low = 0.64;
+  state.mid = 0.58;
+  state.high = 0.55;
+  state.amplitude = 0.74;
+  state.pulse = 0.22;
+
+  const renderer = new Renderer(28, 12);
+  const theme = buildTheme(true, false, state.styleProfile);
+  const originalNow = Date.now;
+
+  Date.now = () => state.startTime + 2100;
+  try {
+    renderTopographic(state, renderer, { x: 0, y: 0, width: 28, height: 12 }, theme);
+  } finally {
+    Date.now = originalNow;
+  }
+
+  const frame = renderer.toFrameString().replace("\x1b[H", "");
+  assert.match(frame, /[\-:=+#]/);
 });

@@ -10,6 +10,7 @@ export const VIS_MODE_IDS = [
   "skyline",
   "fire",
   "tunnel",
+  "topographic",
 ] as const;
 
 export type VisMode = typeof VIS_MODE_IDS[number];

@@ -6,6 +6,7 @@ import { prepareFire, renderFire } from "./fire.js";
 import { renderScroll, prepareScroll } from "./scroll.js";
 import { renderSkyline } from "./skyline.js";
 import { renderSpectrum } from "./spectrum.js";
+import { renderTopographic } from "./topographic.js";
 import { prepareTunnel, renderTunnel } from "./tunnel.js";
 import { renderWavefield } from "./wavefield.js";
 
@@ -49,6 +50,11 @@ const MODE_DEFINITIONS: Record<VisMode, VisualizerModeDefinition> = {
     label: "Tunnel",
     prepare: prepareTunnel,
     render: renderTunnel,
+  },
+  topographic: {
+    id: "topographic",
+    label: "Topographic",
+    render: renderTopographic,
   },
 };
 

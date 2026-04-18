@@ -9,6 +9,7 @@ exports.VIS_MODE_IDS = [
     "skyline",
     "fire",
     "tunnel",
+    "topographic",
 ];
 function createInitialState(mode, numBars, cols, rows) {
     const initialStyle = {

@@ -8,6 +8,7 @@ const fire_js_1 = require("./fire.js");
 const scroll_js_1 = require("./scroll.js");
 const skyline_js_1 = require("./skyline.js");
 const spectrum_js_1 = require("./spectrum.js");
+const topographic_js_1 = require("./topographic.js");
 const tunnel_js_1 = require("./tunnel.js");
 const wavefield_js_1 = require("./wavefield.js");
 const MODE_DEFINITIONS = {
@@ -43,6 +44,11 @@ const MODE_DEFINITIONS = {
         label: "Tunnel",
         prepare: tunnel_js_1.prepareTunnel,
         render: tunnel_js_1.renderTunnel,
+    },
+    topographic: {
+        id: "topographic",
+        label: "Topographic",
+        render: topographic_js_1.renderTopographic,
     },
 };
 exports.VISUALIZER_MODE_ORDER = state_js_1.VIS_MODE_IDS;

@@ -2,38 +2,44 @@
  * Visualizer engine.
  *
  * Coordinates:
- *   - Audio frame intake → DSP pipeline
- *   - Spotify metadata polling (1 Hz)
- *   - Render loop (target 30 FPS)
- *   - Keyboard input actions
+ *   - Analyzer frame intake → visual state
+ *   - Desktop player metadata polling
+ *   - Render loop
+ *   - Keyboard transport controls
  */
-import type { AudioSource } from "../audio/AudioSource.js";
+import type { AnalysisSource } from "../analysis/AnalysisSource.js";
 import type { VisMode } from "./state.js";
+import type { PlayerBackend } from "../player/types.js";
 export interface EngineOptions {
     mode: VisMode;
     numBars: number;
     fps: number;
-    sampleRate: number;
     asciiSafe: boolean;
     noColor: boolean;
 }
 export declare class VisualizerEngine {
-    private audio;
-    private opts;
+    private static readonly PLAYING_POLL_MS;
+    private static readonly IDLE_POLL_MS;
+    private readonly player;
+    private readonly analysis;
+    private readonly opts;
     private state;
     private renderer;
     private theme;
-    private peak;
     private running;
     private renderTimer;
-    private spotifyTimer;
+    private playerTimer;
+    private playerPollInFlight;
     private lastFrameMs;
-    constructor(audio: AudioSource, opts: EngineOptions);
+    constructor(player: PlayerBackend, analysis: AnalysisSource, opts: EngineOptions);
     start(): Promise<void>;
     stop(): Promise<void>;
-    private processAudioFrame;
-    private pollSpotify;
-    private syncAnalysisFrame;
+    private processAnalysisFrame;
+    private pollPlayer;
+    private schedulePlayerPoll;
+    private nextPlayerPollDelay;
+    private runPlayerPollLoop;
+    private requestImmediatePlayerPoll;
     private renderFrame;
     private handleAction;
 }

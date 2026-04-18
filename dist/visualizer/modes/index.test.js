@@ -11,14 +11,17 @@ const state_js_1 = require("../state.js");
 const index_js_1 = require("./index.js");
 const fire_js_1 = require("./fire.js");
 const skyline_js_1 = require("./skyline.js");
+const topographic_js_1 = require("./topographic.js");
 const tunnel_js_1 = require("./tunnel.js");
-(0, node_test_1.default)("visualizer mode registry includes skyline, fire, and tunnel", () => {
+(0, node_test_1.default)("visualizer mode registry includes skyline, fire, tunnel, and topographic", () => {
     strict_1.default.equal((0, index_js_1.isVisualizerMode)("skyline"), true);
     strict_1.default.equal((0, index_js_1.isVisualizerMode)("fire"), true);
     strict_1.default.equal((0, index_js_1.isVisualizerMode)("tunnel"), true);
+    strict_1.default.equal((0, index_js_1.isVisualizerMode)("topographic"), true);
     strict_1.default.equal((0, index_js_1.getVisualizerMode)("skyline").label, "Skyline");
     strict_1.default.equal((0, index_js_1.getVisualizerMode)("fire").label, "Fire");
     strict_1.default.equal((0, index_js_1.getVisualizerMode)("tunnel").label, "Tunnel");
+    strict_1.default.equal((0, index_js_1.getVisualizerMode)("topographic").label, "Topographic");
     strict_1.default.deepEqual(index_js_1.VISUALIZER_MODE_ORDER, [
         "wavefield",
         "scroll",
@@ -26,6 +29,7 @@ const tunnel_js_1 = require("./tunnel.js");
         "skyline",
         "fire",
         "tunnel",
+        "topographic",
     ]);
 });
 (0, node_test_1.default)("renderSkyline produces ASCII buildings above the baseline", () => {
@@ -94,5 +98,26 @@ const tunnel_js_1 = require("./tunnel.js");
     const frame = renderer.toFrameString().replace("\x1b[H", "");
     strict_1.default.match(frame, /[\/\\]/);
     strict_1.default.match(frame, /[|\-]/);
+});
+(0, node_test_1.default)("topographic mode renders contour lines", () => {
+    const state = (0, state_js_1.createInitialState)("topographic", 12, 28, 12);
+    state.smoothedBuckets = new Float32Array([0.25, 0.42, 0.6, 0.7, 0.86, 0.78, 0.72, 0.56, 0.48, 0.36, 0.28, 0.22]);
+    state.low = 0.64;
+    state.mid = 0.58;
+    state.high = 0.55;
+    state.amplitude = 0.74;
+    state.pulse = 0.22;
+    const renderer = new renderer_js_1.Renderer(28, 12);
+    const theme = (0, theme_js_1.buildTheme)(true, false, state.styleProfile);
+    const originalNow = Date.now;
+    Date.now = () => state.startTime + 2100;
+    try {
+        (0, topographic_js_1.renderTopographic)(state, renderer, { x: 0, y: 0, width: 28, height: 12 }, theme);
+    }
+    finally {
+        Date.now = originalNow;
+    }
+    const frame = renderer.toFrameString().replace("\x1b[H", "");
+    strict_1.default.match(frame, /[\-:=+#]/);
 });
 //# sourceMappingURL=index.test.js.map
