@@ -1,4 +1,9 @@
-export type VisMode = "wavefield" | "scroll" | "spectrum";
+import type { AsciiArt } from "../album/converter.js";
+import type { SongFeatures } from "../dsp/songFeatures.js";
+import type { SongTheme } from "./songTheme.js";
+import type { LyricLine } from "../lyrics/lrclib.js";
+export type VisMode = "player" | "wavefield" | "scroll" | "spectrum" | "album-art";
+export type BackgroundMode = "wavefield" | "scroll" | "spectrum";
 export interface VisState {
     mode: VisMode;
     smoothedBuckets: Float32Array;
@@ -10,15 +15,57 @@ export interface VisState {
     pulse: number;
     trackName: string;
     artistName: string;
+    albumName: string;
     deviceName: string;
     isPlaying: boolean;
     progressMs: number;
     durationMs: number;
+    albumArt: AsciiArt | null;
+    albumArtUrl: string;
+    priorMode: VisMode;
     cols: number;
     rows: number;
     startTime: number;
     numBars: number;
     scrollHistory: Float32Array;
+    peakHold: Float32Array;
+    lastPulseMs: number;
+    lastPulseStrength: number;
+    ringQueue: {
+        ms: number;
+        strength: number;
+    }[];
+    particles: Particle[];
+    songFeatures: SongFeatures;
+    songTheme: SongTheme;
+    currentTrackId: string;
+    backgroundMode: BackgroundMode;
+    searchQuery: string;
+    searchFocused: boolean;
+    platterPhase: number;
+    grillePulseRow: number;
+    grillePulseUntilMs: number;
+    lyricsLines: string[];
+    lyricsCycleMs: number;
+    lyricsIdx: number;
+    sideWavePhase: number;
+    lrcLines: LyricLine[];
+    activeLyricIdx: number;
+    lyricRevealedChars: number;
+    lyricRevealStartMs: number;
+    lyricFetchKey: string;
+    lyricFetchState: "idle" | "fetching" | "ready" | "none";
+    cavaBars: Float32Array;
+    cavaActive: boolean;
+}
+export interface Particle {
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    life: number;
+    lifeDecay: number;
+    glyph: string;
 }
 export declare function createInitialState(mode: VisMode, numBars: number, cols: number, rows: number): VisState;
 //# sourceMappingURL=state.d.ts.map

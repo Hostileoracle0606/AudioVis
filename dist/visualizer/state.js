@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createInitialState = createInitialState;
+const songTheme_js_1 = require("./songTheme.js");
 function createInitialState(mode, numBars, cols, rows) {
     return {
         mode,
@@ -13,15 +14,48 @@ function createInitialState(mode, numBars, cols, rows) {
         pulse: 0,
         trackName: "",
         artistName: "",
+        albumName: "",
         deviceName: "",
         isPlaying: false,
         progressMs: 0,
         durationMs: 0,
+        albumArt: null,
+        albumArtUrl: "",
+        priorMode: mode,
         cols,
         rows,
         startTime: Date.now(),
         numBars,
         scrollHistory: new Float32Array(cols),
+        peakHold: new Float32Array(numBars),
+        lastPulseMs: 0,
+        lastPulseStrength: 0,
+        ringQueue: [],
+        particles: [],
+        songFeatures: {
+            bpm: 0, tempoPhase: 0, brightness: 0, warmth: 0,
+            dynamics: 0, density: 0, confidence: 0,
+        },
+        songTheme: (0, songTheme_js_1.defaultSongTheme)({ dim: "", normal: "", bright: "", reset: "\x1b[0m" }, true),
+        currentTrackId: "",
+        backgroundMode: "wavefield",
+        searchQuery: "",
+        searchFocused: false,
+        platterPhase: 0,
+        grillePulseRow: -1,
+        grillePulseUntilMs: 0,
+        lyricsLines: [],
+        lyricsCycleMs: 0,
+        lyricsIdx: 0,
+        sideWavePhase: 0,
+        lrcLines: [],
+        activeLyricIdx: 0,
+        lyricRevealedChars: 0,
+        lyricRevealStartMs: 0,
+        lyricFetchKey: "",
+        lyricFetchState: "idle",
+        cavaBars: new Float32Array(numBars),
+        cavaActive: false,
     };
 }
 //# sourceMappingURL=state.js.map

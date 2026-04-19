@@ -1,12 +1,23 @@
 "use strict";
 /**
- * Visualizer engine.
+ * VisualizerEngine — Ratatui-pattern architecture.
  *
- * Coordinates:
- *   - Audio frame intake → DSP pipeline
- *   - Spotify metadata polling (1 Hz)
- *   - Render loop (target 30 FPS)
- *   - Keyboard input actions
+ * Responsibilities:
+ *   - Coordinate background services: AudioSource, CavaStream, LyricsService
+ *   - Maintain a single VisState (mutated only by service handlers + render tick)
+ *   - Run the render loop: compute constraint layout → dispatch pure widget functions
+ *   - Handle keyboard input
+ *
+ * Layout (computed each frame via tui.ts):
+ *
+ *   ┌── search bar (1 row, full width) ────────────────────────┐
+ *   ├─────────────────────┬────────────────────────────────────┤
+ *   │  Record Deck (50 %) │  Lyrics Terminal (50 % × 50 %)     │
+ *   │  ─ now playing      ├────────────────────────────────────┤
+ *   │  ─ platter          │  Wave Panel     (50 % × 50 %)      │
+ *   │  ─ progress│grille  │                                    │
+ *   │  ─ album art        │                                    │
+ *   └─────────────────────┴────────────────────────────────────┘
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -48,18 +59,27 @@ const buckets_js_1 = require("../dsp/buckets.js");
 const smoothing_js_1 = require("../dsp/smoothing.js");
 const features_js_1 = require("../dsp/features.js");
 const state_js_1 = require("./state.js");
-const wavefield_js_1 = require("./modes/wavefield.js");
-const scroll_js_1 = require("./modes/scroll.js");
-const spectrum_js_1 = require("./modes/spectrum.js");
 const renderer_js_1 = require("../ui/renderer.js");
 const theme_js_1 = require("../ui/theme.js");
 const layout_js_1 = require("../ui/layout.js");
-const progressBar_js_1 = require("../ui/progressBar.js");
-const format_js_1 = require("../ui/format.js");
 const AppScreen_js_1 = require("../ui/AppScreen.js");
 const input_js_1 = require("../ui/input.js");
-const spotify = __importStar(require("../spotify/client.js"));
+const tui_js_1 = require("../ui/tui.js");
+const spotifyDesktop = __importStar(require("../macos/spotifyDesktop.js"));
 const cleanup_js_1 = require("../utils/cleanup.js");
+const fetcher_js_1 = require("../album/fetcher.js");
+const converter_js_1 = require("../album/converter.js");
+const cache_js_1 = require("../album/cache.js");
+const cava_js_1 = require("../audio/cava.js");
+const lrclib_js_1 = require("../lyrics/lrclib.js");
+const songFeatures_js_1 = require("../dsp/songFeatures.js");
+const songTheme_js_1 = require("./songTheme.js");
+const layout_js_2 = require("../ui/layout.js");
+// Widgets
+const searchBar_js_1 = require("./widgets/searchBar.js");
+const recordDeck_js_1 = require("./widgets/recordDeck.js");
+const lyricsTerminal_js_1 = require("./widgets/lyricsTerminal.js");
+const wavePanel_js_1 = require("./widgets/wavePanel.js");
 class VisualizerEngine {
     audio;
     opts;
@@ -70,46 +90,52 @@ class VisualizerEngine {
     running = false;
     renderTimer = null;
     spotifyTimer = null;
-    lastFrameMs = 0;
+    cava = null;
+    songTracker = new songFeatures_js_1.SongFeatureTracker();
+    themeRefreshCounter = 0;
     constructor(audio, opts) {
         this.audio = audio;
         this.opts = opts;
         const { cols, rows } = (0, AppScreen_js_1.getTerminalSize)();
         this.state = (0, state_js_1.createInitialState)(opts.mode, opts.numBars, cols, rows);
     }
+    // ── lifecycle ──────────────────────────────────────────────────────────────
     async start() {
         this.running = true;
         this.theme = (0, theme_js_1.buildTheme)(this.opts.asciiSafe, !this.opts.noColor);
-        // Set up terminal
         (0, AppScreen_js_1.enterAlternateScreen)();
         (0, cleanup_js_1.onCleanup)(() => this.stop());
         const { cols, rows } = (0, AppScreen_js_1.getTerminalSize)();
         this.renderer = new renderer_js_1.Renderer(cols, rows);
         this.state.cols = cols;
         this.state.rows = rows;
-        // Handle terminal resize
         process.stdout.on("resize", () => {
             const { cols: c, rows: r } = (0, AppScreen_js_1.getTerminalSize)();
             this.renderer.resize(c, r);
             this.state.cols = c;
             this.state.rows = r;
             this.state.scrollHistory = new Float32Array(c);
+            // Force art reconversion on next poll
+            if (this.state.albumArt && this.state.albumArt.cols !== c) {
+                this.state.albumArtUrl = "";
+                this.state.albumArt = null;
+            }
         });
-        // Wire audio frames into DSP pipeline
+        // Audio → DSP
         this.audio.onFrame((frame) => {
             if (!this.running)
                 return;
             this.processAudioFrame(frame);
         });
-        // Start audio capture
         await this.audio.start();
-        // Kick off Spotify poll immediately
+        // Cava (optional — falls back to smoothedBuckets on error)
+        this.startCava();
+        // Spotify metadata poll (1 Hz)
         void this.pollSpotify();
-        this.spotifyTimer = setInterval(() => void this.pollSpotify(), 1000);
+        this.spotifyTimer = setInterval(() => void this.pollSpotify(), 1_000);
         // Render loop
         const frameMs = Math.round(1000 / this.opts.fps);
         this.renderTimer = setInterval(() => this.renderFrame(), frameMs);
-        // Keyboard input
         (0, input_js_1.startInput)((action) => void this.handleAction(action));
     }
     async stop() {
@@ -122,16 +148,31 @@ class VisualizerEngine {
             clearInterval(this.spotifyTimer);
         this.renderTimer = null;
         this.spotifyTimer = null;
+        this.cava?.stop();
+        this.cava = null;
         (0, input_js_1.stopInput)();
         await this.audio.stop();
         (0, AppScreen_js_1.exitAlternateScreen)();
     }
-    // ---------------------------------------------------------------------------
-    // DSP
-    // ---------------------------------------------------------------------------
+    // ── cava ──────────────────────────────────────────────────────────────────
+    startCava() {
+        const numBars = Math.max(8, Math.min(32, this.opts.numBars));
+        this.cava = new cava_js_1.CavaStream(numBars, this.opts.fps);
+        this.cava.on("frame", (bars) => {
+            if (!this.running)
+                return;
+            this.state.cavaBars = bars;
+            this.state.cavaActive = true;
+        });
+        this.cava.on("unavailable", (_reason) => {
+            // cava not installed — wave panel will use smoothedBuckets
+            this.cava = null;
+        });
+        this.cava.start();
+    }
+    // ── DSP ───────────────────────────────────────────────────────────────────
     processAudioFrame(frame) {
         const mags = (0, fft_js_1.computeMagnitudeSpectrum)(frame);
-        // Compute raw buckets and smooth them
         const raw = (0, buckets_js_1.computeBuckets)(mags, this.opts.numBars, this.opts.sampleRate, this.peak);
         if (this.state.rawBuckets.length !== raw.length) {
             this.state.rawBuckets = new Float32Array(raw.length);
@@ -139,46 +180,126 @@ class VisualizerEngine {
         }
         this.state.rawBuckets.set(raw);
         (0, smoothing_js_1.smoothBuckets)(this.state.smoothedBuckets, raw, smoothing_js_1.DEFAULT_BAR_SMOOTHING);
-        // Energy features
         const features = (0, features_js_1.extractFeatures)(mags, this.opts.sampleRate);
         this.state.low = (0, smoothing_js_1.smoothValue)(this.state.low, features.low, smoothing_js_1.DEFAULT_ENERGY_SMOOTHING);
         this.state.mid = (0, smoothing_js_1.smoothValue)(this.state.mid, features.mid, smoothing_js_1.DEFAULT_ENERGY_SMOOTHING);
         this.state.high = (0, smoothing_js_1.smoothValue)(this.state.high, features.high, smoothing_js_1.DEFAULT_ENERGY_SMOOTHING);
         this.state.amplitude = (0, smoothing_js_1.smoothValue)(this.state.amplitude, features.rms, smoothing_js_1.DEFAULT_ENERGY_SMOOTHING);
-        this.state.pulse = features.pulse; // don't smooth pulse — it should be sharp
+        this.state.pulse = features.pulse;
+        const now = Date.now();
+        if (features.pulse > 0.35) {
+            this.state.lastPulseMs = now;
+            this.state.lastPulseStrength = Math.min(1, features.pulse);
+            this.state.ringQueue.push({ ms: now, strength: features.pulse });
+            if (this.state.ringQueue.length > 4)
+                this.state.ringQueue.shift();
+        }
+        this.state.ringQueue = this.state.ringQueue.filter((r) => now - r.ms < 1200);
+        this.songTracker.update(this.state.low, this.state.mid, this.state.high, this.state.amplitude, features.pulse, now);
+        this.state.songFeatures = this.songTracker.features;
     }
-    // ---------------------------------------------------------------------------
-    // Spotify polling
-    // ---------------------------------------------------------------------------
+    // ── Spotify polling ───────────────────────────────────────────────────────
     async pollSpotify() {
         try {
-            const playback = await spotify.getCurrentPlayback();
-            if (!playback || !playback.item) {
+            const st = await spotifyDesktop.getState();
+            if (!st) {
                 this.state.trackName = "";
                 this.state.artistName = "";
-                this.state.deviceName = playback?.device?.name ?? "";
+                this.state.albumName = "";
+                this.state.deviceName = "";
                 this.state.isPlaying = false;
                 this.state.progressMs = 0;
                 this.state.durationMs = 0;
+                this.state.albumArtUrl = "";
+                this.state.albumArt = null;
                 return;
             }
-            this.state.trackName = playback.item.name;
-            this.state.artistName = playback.item.artists.map((a) => a.name).join(", ");
-            this.state.deviceName = playback.device?.name ?? "";
-            this.state.isPlaying = playback.is_playing;
-            this.state.progressMs = playback.progress_ms ?? 0;
-            this.state.durationMs = playback.item.duration_ms;
+            this.state.trackName = st.trackName;
+            this.state.artistName = st.artistName;
+            this.state.albumName = st.albumName;
+            this.state.deviceName = st.deviceName;
+            this.state.isPlaying = st.isPlaying;
+            this.state.progressMs = st.progressMs;
+            this.state.durationMs = st.durationMs;
+            // Track-change detection
+            const trackKey = `${st.trackName}:::${st.artistName}`;
+            if (trackKey !== this.state.currentTrackId) {
+                this.state.currentTrackId = trackKey;
+                this.songTracker.reset();
+                this.state.particles = [];
+                this.state.ringQueue = [];
+                this.rebuildSongTheme();
+                // Kick off lyrics fetch for the new track
+                void this.fetchLyricsForTrack(st.trackName, st.artistName, st.albumName, trackKey);
+            }
+            // Album art
+            const imageUrl = st.albumArtUrl;
+            if (imageUrl && imageUrl !== this.state.albumArtUrl) {
+                this.state.albumArtUrl = imageUrl;
+                const cached = (0, cache_js_1.getCached)(trackKey);
+                if (cached && cached.cols === this.state.cols) {
+                    this.state.albumArt = cached;
+                }
+                else {
+                    const cols = this.state.cols;
+                    const noColor = this.opts.noColor;
+                    const layout = (0, layout_js_2.computeLayout)(cols, this.state.rows);
+                    const vizH = layout.visualizer.height;
+                    (0, fetcher_js_1.fetchImageBuffer)(imageUrl)
+                        .then((buf) => (0, converter_js_1.convertToAscii)(buf, trackKey, cols, vizH, noColor))
+                        .then((art) => {
+                        (0, cache_js_1.setCached)(trackKey, art);
+                        if (this.state.albumArtUrl === imageUrl) {
+                            this.state.albumArt = art;
+                        }
+                    })
+                        .catch(() => { });
+                }
+            }
         }
         catch {
-            // Network or auth error — don't crash the visualizer
+            // Desktop query failed — don't crash
         }
     }
-    // ---------------------------------------------------------------------------
-    // Render
-    // ---------------------------------------------------------------------------
+    // ── Lyrics ────────────────────────────────────────────────────────────────
+    async fetchLyricsForTrack(track, artist, album, key) {
+        this.state.lrcLines = [];
+        this.state.activeLyricIdx = 0;
+        this.state.lyricRevealedChars = 0;
+        this.state.lyricRevealStartMs = 0;
+        this.state.lyricFetchKey = key;
+        this.state.lyricFetchState = "fetching";
+        const lines = await (0, lrclib_js_1.fetchLyrics)(track, artist, album);
+        // Guard: track might have changed while we awaited
+        if (this.state.lyricFetchKey !== key)
+            return;
+        if (lines.length > 0) {
+            this.state.lrcLines = lines;
+            this.state.lyricFetchState = "ready";
+        }
+        else {
+            this.state.lyricFetchState = "none";
+        }
+    }
+    // ── Song theme ────────────────────────────────────────────────────────────
+    rebuildSongTheme() {
+        const base = { dim: this.theme.dim, normal: this.theme.normal, bright: this.theme.bright, reset: this.theme.reset };
+        this.state.songTheme = this.state.currentTrackId
+            ? (0, songTheme_js_1.buildSongTheme)(this.state.currentTrackId, this.state.songFeatures, base, this.theme.colorEnabled)
+            : (0, songTheme_js_1.defaultSongTheme)(base, this.theme.colorEnabled);
+    }
+    // ── Render ────────────────────────────────────────────────────────────────
     renderFrame() {
         if (!this.running)
             return;
+        const now = Date.now();
+        // Periodic theme refresh (every ~3 s) as song features settle
+        if (++this.themeRefreshCounter >= Math.round(this.opts.fps * 3)) {
+            this.themeRefreshCounter = 0;
+            this.rebuildSongTheme();
+        }
+        // Advance lyrics sync
+        this.syncLyrics(now);
         const { cols, rows } = { cols: this.state.cols, rows: this.state.rows };
         this.renderer.clear();
         if ((0, layout_js_1.isTooSmall)(cols, rows)) {
@@ -186,54 +307,34 @@ class VisualizerEngine {
             this.renderer.flush();
             return;
         }
-        const layout = (0, layout_js_1.computeLayout)(cols, rows);
-        const s = this.state;
-        // --- Header ---
-        const hasTrack = s.trackName.length > 0;
-        const deviceLabel = s.deviceName ? `[${s.deviceName}]` : "";
-        const DEVICE_PAD = deviceLabel.length + 1;
-        if (hasTrack) {
-            const titleFull = `${s.trackName}  —  ${s.artistName}`;
-            const maxTitleW = Math.max(1, cols - DEVICE_PAD - 1);
-            const titleLine = "  " + (0, format_js_1.truncateMiddle)(titleFull, maxTitleW - 2);
-            this.renderer.write(0, 0, (0, format_js_1.padRight)(titleLine, cols - DEVICE_PAD));
-            this.renderer.write(cols - DEVICE_PAD, 0, (0, format_js_1.padLeft)(deviceLabel, DEVICE_PAD));
-            const stateStr = s.isPlaying ? "Playing" : "Paused";
-            const elapsed = (0, format_js_1.formatSeconds)(s.progressMs / 1000);
-            const total = (0, format_js_1.formatSeconds)(s.durationMs / 1000);
-            const timePart = `${elapsed} / ${total}`;
-            const stateLine = `  State: ${stateStr}`;
-            this.renderer.write(0, 1, (0, format_js_1.padRight)(stateLine, cols - timePart.length - 1));
-            this.renderer.write(cols - timePart.length, 1, timePart);
-        }
-        else {
-            this.renderer.write(0, 0, "  Now playing: Nothing active");
-            this.renderer.write(0, 1, "  State: Idle");
-        }
-        // --- Progress bar ---
-        const progress = s.durationMs > 0 ? s.progressMs / s.durationMs : 0;
-        const barWidth = Math.min(60, cols - 4);
-        const bar = (0, progressBar_js_1.renderProgressBar)(progress, barWidth);
-        this.renderer.writeCenter(layout.progress.y, bar);
-        // --- Visualizer ---
-        (0, scroll_js_1.pushScrollHistory)(s, layout.visualizer.width);
-        if (s.mode === "wavefield") {
-            (0, wavefield_js_1.renderWavefield)(s, this.renderer, layout.visualizer, this.theme);
-        }
-        else if (s.mode === "scroll") {
-            (0, scroll_js_1.renderScroll)(s, this.renderer, layout.visualizer, this.theme);
-        }
-        else {
-            (0, spectrum_js_1.renderSpectrum)(s, this.renderer, layout.visualizer, this.theme);
-        }
-        // --- Footer ---
-        const footer = "[space] play/pause   [n] next   [p] prev   [s] mode   [q] quit";
-        this.renderer.writeCenter(layout.footer.y, footer);
+        // ── Constraint layout ──
+        //   Frame → [searchR (1), bodyR (fill)]
+        //   bodyR → [leftR (50 %), rightR (50 %)]
+        //   rightR → [lyricsR (50 %), waveR (50 %)]
+        const frame = { x: 0, y: 0, width: cols, height: rows };
+        const [searchR, bodyR] = (0, tui_js_1.vSplit)(frame, [tui_js_1.C.length(1), tui_js_1.C.fill()]);
+        const [leftR, rightR] = (0, tui_js_1.hSplit)(bodyR, [tui_js_1.C.percent(50), tui_js_1.C.percent(50)]);
+        const [lyricsR, waveR] = (0, tui_js_1.vSplit)(rightR, [tui_js_1.C.percent(50), tui_js_1.C.percent(50)]);
+        // ── Widget dispatch ──
+        (0, searchBar_js_1.renderSearchBar)(this.state, this.renderer, searchR);
+        (0, recordDeck_js_1.renderRecordDeck)(this.state, this.renderer, leftR, now);
+        (0, lyricsTerminal_js_1.renderLyricsTerminal)(this.state, this.renderer, lyricsR, now);
+        (0, wavePanel_js_1.renderWavePanel)(this.state, this.renderer, waveR, now);
         this.renderer.flush();
     }
-    // ---------------------------------------------------------------------------
-    // Input handling
-    // ---------------------------------------------------------------------------
+    // ── Lyrics sync ───────────────────────────────────────────────────────────
+    syncLyrics(now) {
+        const lines = this.state.lrcLines;
+        if (lines.length === 0)
+            return;
+        const newIdx = (0, lrclib_js_1.activeLyricIndex)(lines, this.state.progressMs);
+        if (newIdx !== this.state.activeLyricIdx) {
+            this.state.activeLyricIdx = newIdx;
+            this.state.lyricRevealedChars = 0;
+            this.state.lyricRevealStartMs = now;
+        }
+    }
+    // ── Input ─────────────────────────────────────────────────────────────────
     async handleAction(action) {
         try {
             switch (action) {
@@ -243,35 +344,51 @@ class VisualizerEngine {
                     break;
                 case "toggle_play":
                     if (this.state.isPlaying)
-                        await spotify.pause();
+                        await spotifyDesktop.pause();
                     else
-                        await spotify.play();
-                    // Immediately refresh metadata
+                        await spotifyDesktop.play();
                     await this.pollSpotify();
                     break;
                 case "next":
-                    await spotify.nextTrack();
+                    await spotifyDesktop.nextTrack();
                     await this.pollSpotify();
                     break;
                 case "prev":
-                    await spotify.previousTrack();
+                    await spotifyDesktop.previousTrack();
                     await this.pollSpotify();
                     break;
-                case "switch_mode": {
-                    const modes = ["wavefield", "scroll", "spectrum"];
-                    const idx = modes.indexOf(this.state.mode);
-                    this.state.mode = modes[(idx + 1) % modes.length];
+                case "switch_mode":
+                    // Mode switching no longer cycles visualizer modes — this UI
+                    // has a fixed layout.  Re-use the key to toggle album-art overlay.
+                    if (this.state.mode !== "album-art") {
+                        if (this.state.albumArt) {
+                            this.state.priorMode = this.state.mode;
+                            this.state.mode = "album-art";
+                        }
+                    }
+                    else {
+                        this.state.mode = this.state.priorMode;
+                    }
                     break;
-                }
+                case "toggle_album_art":
+                    if (this.state.mode !== "album-art") {
+                        if (this.state.albumArt) {
+                            this.state.priorMode = this.state.mode;
+                            this.state.mode = "album-art";
+                        }
+                    }
+                    else {
+                        this.state.mode = this.state.priorMode;
+                    }
+                    break;
                 case "refresh":
                     await this.pollSpotify();
                     break;
             }
         }
         catch (err) {
-            // Show error briefly — don't crash
             const msg = err instanceof Error ? err.message : String(err);
-            this.renderer.writeCenter(this.state.rows - 2, `  ERR: ${msg.slice(0, this.state.cols - 8)}  `);
+            this.renderer.writeCenter(this.state.rows - 2, `  ERR: ${msg.slice(0, Math.max(1, this.state.cols - 8))}  `);
         }
     }
 }

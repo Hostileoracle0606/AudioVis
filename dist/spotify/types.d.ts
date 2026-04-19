@@ -22,6 +22,11 @@ export interface SpotifyTrack {
     duration_ms: number;
     album: {
         name: string;
+        images: Array<{
+            url: string;
+            width: number;
+            height: number;
+        }>;
     };
 }
 export interface SpotifyPlaybackState {

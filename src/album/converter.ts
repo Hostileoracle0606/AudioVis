@@ -1,53 +1,34 @@
 // src/album/converter.ts
 import Jimp from "jimp";
+import { ansilize, ansilizeMono } from "./ansilize.js";
 
 export interface AsciiArt {
   trackId: string;
-  /** 2 rows × 4 cols thumbnail for the header icon. Each string is one row. */
+  /** 2 rows × 4 cols thumbnail for the header icon. */
   thumbnail: string[];
-  /** Full-size art — one string per row, with ANSI 256-color codes. */
+  /** Fullscreen album-art-mode lines (ANSI truecolor half-blocks). */
   lines: string[];
+  fullCols: number;
+  fullRows: number;
+  /** Player-mode screen-panel lines at a smaller target size. */
+  playerLines: string[];
+  playerCols: number;
+  playerRows: number;
   /** Terminal dimensions at conversion time — stale-check on resize. */
   cols: number;
   rows: number;
 }
 
-const PALETTE = " .,:;+*#%@█";
-
-/** Map luminance [0,1] to an ASCII character. */
-function lumToChar(lum: number): string {
-  const idx = Math.min(
-    PALETTE.length - 1,
-    Math.floor(lum * PALETTE.length)
-  );
-  return PALETTE[idx];
+function renderAt(img: Jimp, cols: number, rows: number, noColor: boolean): string[] {
+  if (cols <= 0 || rows <= 0) return [];
+  return noColor ? ansilizeMono(img, cols, rows) : ansilize(img, cols, rows);
 }
 
 /**
- * Find the nearest xterm-256 color index for an RGB value.
- * Uses the 216-color cube (indices 16–231) for color fidelity.
- */
-function rgbToAnsi256(r: number, g: number, b: number): number {
-  const ri = Math.round((r / 255) * 5);
-  const gi = Math.round((g / 255) * 5);
-  const bi = Math.round((b / 255) * 5);
-  return 16 + 36 * ri + 6 * gi + bi;
-}
-
-/** Wrap a character with ANSI 256 foreground color. */
-function colorChar(ch: string, r: number, g: number, b: number): string {
-  const code = rgbToAnsi256(r, g, b);
-  return `\x1b[38;5;${code}m${ch}\x1b[0m`;
-}
-
-/**
- * Convert a raw image buffer to an AsciiArt object.
- *
- * @param buffer   Raw JPEG/PNG bytes
- * @param trackId  Spotify track ID (stored for cache keying)
- * @param vizCols  Width of the visualizer region in terminal columns
- * @param vizRows  Height of the visualizer region in terminal rows
- * @param noColor  If true, emit plain ASCII without ANSI color codes
+ * Convert a raw image buffer to an AsciiArt object, using the ansilize
+ * half-block truecolor renderer.  Produces two renderings:
+ *   - `lines` at album-art-mode size (~48% of viz width)
+ *   - `playerLines` at player-mode screen-panel size
  */
 export async function convertToAscii(
   buffer: Buffer,
@@ -56,63 +37,32 @@ export async function convertToAscii(
   vizRows: number,
   noColor: boolean
 ): Promise<AsciiArt> {
-  // Left panel is 48% of visualizer width
-  const artCols = Math.floor(vizCols * 0.48);
-  // Correct for terminal character aspect ratio (~2:1 height:width)
-  const artRows = Math.floor(artCols / 2.2);
-  const targetRows = Math.min(artRows, vizRows - 2); // leave 1 row margin top+bottom
-  const targetCols = Math.floor(targetRows * 2.2);
-
-  if (targetRows <= 0 || targetCols <= 0) {
-    return { trackId, thumbnail: [], lines: [], cols: vizCols, rows: vizRows };
-  }
-
   const img = await Jimp.read(buffer);
 
-  // ── Full-size art ──────────────────────────────────────────────────────────
-  const full = img.clone().resize(targetCols, targetRows);
-  const lines: string[] = [];
-  const actualCols = full.bitmap.width;
-  const actualRows = full.bitmap.height;
+  // Fullscreen album-art mode: ~48% viz width, aspect-corrected.
+  const fullCols0 = Math.max(1, Math.floor(vizCols * 0.48));
+  const fullRows = Math.max(1, Math.min(vizRows - 2, Math.floor(fullCols0 / 2.2)));
+  const fullCols = Math.max(1, Math.floor(fullRows * 2.2));
 
-  for (let row = 0; row < actualRows; row++) {
-    let line = "";
-    for (let col = 0; col < actualCols; col++) {
-      const pixel = full.getPixelColor(col, row);
-      const r = (pixel >>> 24) & 0xff;
-      const g = (pixel >>> 16) & 0xff;
-      const b = (pixel >>> 8)  & 0xff;
-      const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-      const ch = lumToChar(lum);
-      line += noColor ? ch : colorChar(ch, r, g, b);
-    }
-    lines.push(line);
-  }
+  // Player mode screen panel: roughly the screen sub-panel dimensions.
+  // Chassis is ~58% of viz width, screen is ~58% of chassis interior → ~32%.
+  // Height: roughly 8-10 rows (see renderChassis).
+  const playerCols = Math.max(4, Math.min(40, Math.floor(vizCols * 0.28)));
+  const playerRows = Math.max(3, Math.min(12, Math.floor(playerCols / 2.6)));
 
-  // ── 4×2 thumbnail ─────────────────────────────────────────────────────────
-  const thumb = img.clone().resize(4, 2);
-  const thumbnail: string[] = [];
-  const thumbCols = thumb.bitmap.width;
-  const thumbRows = thumb.bitmap.height;
-
-  for (let row = 0; row < thumbRows; row++) {
-    let line = "";
-    for (let col = 0; col < thumbCols; col++) {
-      const pixel = thumb.getPixelColor(col, row);
-      const r = (pixel >>> 24) & 0xff;
-      const g = (pixel >>> 16) & 0xff;
-      const b = (pixel >>> 8)  & 0xff;
-      const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-      const ch = lumToChar(lum);
-      line += noColor ? ch : colorChar(ch, r, g, b);
-    }
-    thumbnail.push(line);
-  }
+  const lines = renderAt(img, fullCols, fullRows, noColor);
+  const playerLines = renderAt(img, playerCols, playerRows, noColor);
+  const thumb = renderAt(img, 4, 2, noColor);
 
   return {
     trackId,
-    thumbnail,
+    thumbnail: thumb,
     lines,
+    fullCols,
+    fullRows,
+    playerLines,
+    playerCols,
+    playerRows,
     cols: vizCols,
     rows: vizRows,
   };

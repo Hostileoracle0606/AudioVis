@@ -23,7 +23,8 @@ export async function runVisualizer(opts: VisOpts): Promise<void> {
   const config = loadConfig();
   const mode = (
     opts.mode === "spectrum" ? "spectrum" :
-    opts.mode === "scroll" ? "scroll" : "wavefield"
+    opts.mode === "scroll" ? "scroll" :
+    opts.mode === "wavefield" ? "wavefield" : "player"
   ) as VisMode;
   const numBars = Math.max(4, Math.min(128, parseInt(opts.bars, 10) || 32));
   const fps = Math.max(5, Math.min(60, parseInt(opts.fps, 10) || 30));
@@ -78,7 +79,7 @@ export function registerVisualizer(program: Command): void {
   program
     .command("visualizer")
     .description("Start the full-screen ASCII music visualizer")
-    .option("--mode <wavefield|scroll|spectrum>", "Visualization mode", "wavefield")
+    .option("--mode <player|wavefield|scroll|spectrum>", "Visualization mode", "player")
     .option("--bars <n>", "Number of spectrum bars", "32")
     .option("--fps <n>", "Target frames per second", "30")
     .option("--audio-device <name>", "Audio capture device name or ID")

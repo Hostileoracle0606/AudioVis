@@ -48,21 +48,26 @@ const BRAILLE_BITS = [
     [0, 1, 2, 6], // dc=0
     [3, 4, 5, 7], // dc=1
 ];
-function renderWavefieldBraille(W, H, elapsed, low, mid, high, amplitude, pulse, renderer, region, theme) {
+function renderWavefieldBraille(W, H, elapsed, low, mid, high, amplitude, pulse, renderer, region, theme, state) {
+    const song = state.songTheme;
+    const speedMul = song.phaseSpeedMul;
+    const freqMul = song.spatialFreqMul;
     const TAU = 2 * Math.PI;
     const DOT_W = 2 * W; // total dot columns
     const DOT_H = 4 * H; // total dot rows
     // ── Spatial frequencies: how many bands fit across the screen ───────────
     // Bass → horizontal wave complexity; treble → diagonal fine detail.
-    const fH = 3.0 + low * 4.0;
-    const fV = 2.0 + mid * 3.0;
-    const fD = 1.5 + high * 5.0;
-    const fR = 1.2 + amplitude * 2.5; // radial rings; more rings when louder
+    // All frequencies multiplied by the song's spatialFreqMul so a dense,
+    // energetic track gets finer, busier banding.
+    const fH = (3.0 + low * 4.0) * freqMul;
+    const fV = (2.0 + mid * 3.0) * freqMul;
+    const fD = (1.5 + high * 5.0) * freqMul;
+    const fR = (1.2 + amplitude * 2.5) * freqMul;
     // ── Phase velocities (rad/s) ─────────────────────────────────────────────
-    const sH = (0.8 + low * 1.5) * TAU;
-    const sV = (0.5 + mid * 0.9) * TAU;
-    const sD = (1.4 + high * 2.5) * TAU;
-    const sR = (1.8 + amplitude * 1.2 + pulse * 5.0) * TAU; // rings blast on beat
+    const sH = (0.8 + low * 1.5) * TAU * speedMul;
+    const sV = (0.5 + mid * 0.9) * TAU * speedMul;
+    const sD = (1.4 + high * 2.5) * TAU * speedMul;
+    const sR = (1.8 + amplitude * 1.2 + pulse * 5.0) * TAU * speedMul;
     // ── Beat flash: phase-kick the horizontal wave on each onset ─────────────
     // pulse is a sharp, unsmoothed onset value → creates a brief phase jump
     // that looks like a horizontal "tear" across the plasma — very hyperpop.
@@ -105,15 +110,17 @@ function renderWavefieldBraille(W, H, elapsed, low, mid, high, amplitude, pulse,
             const ch = String.fromCodePoint(0x2800 + bits);
             let cell = ch;
             if (theme.colorEnabled) {
-                // Three brightness tiers based on where in [0,1] the peak field value sits.
-                // High v = plasma peak (constructive interference) → white-hot.
-                // Low v = band edge → dim corona.
-                if (topV > 0.72)
-                    cell = theme.bright + ch + theme.reset;
-                else if (topV > 0.54)
-                    cell = theme.normal + ch + theme.reset;
+                // Four brightness tiers using the song-theme colour ramp — accent
+                // for constructive-interference peaks, bright for the main body,
+                // normal for mid values, dim for band edges.
+                if (topV > 0.80)
+                    cell = song.accent + ch + song.reset;
+                else if (topV > 0.62)
+                    cell = song.bright + ch + song.reset;
+                else if (topV > 0.48)
+                    cell = song.normal + ch + song.reset;
                 else
-                    cell = theme.dim + ch + theme.reset;
+                    cell = song.dim + ch + song.reset;
             }
             renderer.write(termCol, region.y + termRow, cell);
         }
@@ -131,51 +138,147 @@ function renderWavefield(state, renderer, region, theme) {
     // The ASCII path is unchanged for --ascii-safe terminals.
     const useBraille = theme.palette.length <= 5;
     if (useBraille) {
-        renderWavefieldBraille(W, H, elapsed, state.low, state.mid, state.high, state.amplitude, state.pulse, renderer, region, theme);
+        renderWavefieldBraille(W, H, elapsed, state.low, state.mid, state.high, state.amplitude, state.pulse, renderer, region, theme, state);
+        // Render multi-ring overlay on top of the plasma too (they read as
+        // expanding shockwaves against the field).
+        renderBeatRings(state, renderer, region, W, H, theme);
         return;
     }
     // ── ASCII path ────────────────────────────────────────────────────────────
+    // Core wave equations evaluate at multiple "past" times to give a motion
+    // trail — each wave is drawn at t, t-δ, t-2δ at successively dimmer tiers.
+    // This is pure math, no framebuffer state needed.
+    const song = state.songTheme;
+    const speedMul = song.phaseSpeedMul;
+    const extraLayers = song.waveLayerBias; // 0, 1, or 2 extra waves
     const lowAmp = 0.15 + state.low * 0.30;
     const midAmp = 0.07 + state.mid * 0.18;
     const highAmp = 0.03 + state.high * 0.08;
-    const speedLow = 0.35 + state.low * 0.15;
-    const speedMid = 0.70 + state.mid * 0.25;
-    const speedHigh = 1.40 + state.high * 0.40;
+    const xtraAmp = 0.05 + state.mid * 0.15;
+    const speedLow = (0.35 + state.low * 0.15) * speedMul;
+    const speedMid = (0.70 + state.mid * 0.25) * speedMul;
+    const speedHigh = (1.40 + state.high * 0.40) * speedMul;
+    const speedXtra = (1.00 + state.amplitude * 0.50) * speedMul;
     const thick1 = 2.0 + state.low * 1.5 + state.pulse * 0.8;
     const thick2 = 1.6 + state.mid * 1.2;
     const thick3 = 1.2 + state.high * 0.8;
+    const thickX = 1.0;
+    // Trail offsets — three samples at 0, 60ms, 120ms into the past.
+    const TRAIL_STEP = 0.06;
+    const TRAILS = 3;
+    const baseLayers = [
+        { center: cy, amp: cy * lowAmp * 2, freq: 2.0, speed: speedLow, phase: 0.0, thick: thick1 },
+        { center: cy * 0.55, amp: cy * midAmp * 2, freq: 3.5, speed: speedMid, phase: 1.2, thick: thick2 },
+        { center: cy * 1.45, amp: cy * highAmp * 2, freq: 7.0, speed: speedHigh, phase: 2.4, thick: thick3 },
+    ];
+    // Extra slow wide wave when the song is dynamic / beaty.
+    if (extraLayers >= 1) {
+        baseLayers.push({ center: cy * 0.3, amp: cy * xtraAmp * 2, freq: 1.1, speed: speedXtra * 0.5, phase: 0.6, thick: thickX + 0.3 });
+    }
+    // Extra fast fine ripple for very dynamic material.
+    if (extraLayers >= 2) {
+        baseLayers.push({ center: cy * 1.7, amp: cy * xtraAmp * 1.2, freq: 11.0, speed: speedXtra * 1.3, phase: 3.1, thick: thickX });
+    }
     for (let col = 0; col < W; col++) {
         const xNorm = col / W;
         const phaseShift = xNorm * 2 * Math.PI;
-        const w1 = Math.sin(phaseShift * 2.0 + elapsed * speedLow) * (cy * lowAmp * 2);
-        const w2 = Math.sin(phaseShift * 3.5 + elapsed * speedMid + 1.2) * (cy * midAmp * 2) +
-            Math.sin(phaseShift * 1.3 + elapsed * speedMid * 0.6) * (cy * midAmp);
-        const w3 = Math.sin(phaseShift * 7.0 + elapsed * speedHigh + 2.4) * (cy * highAmp * 2);
-        const r1 = cy + w1;
-        const r2 = cy * 0.55 + w2;
-        const r3 = cy * 1.45 + w3;
+        // Walk every (layer, trail-sample) pair and find the closest for this cell.
         for (let rowOffset = 0; rowOffset < H; rowOffset++) {
             const absRow = region.y + rowOffset;
             const rowF = rowOffset + 0.5;
-            const d1 = Math.abs(rowF - r1);
-            const d2 = Math.abs(rowF - r2);
-            const d3 = Math.abs(rowF - r3);
-            const minDist = Math.min(d1 < thick1 ? d1 : Infinity, d2 < thick2 ? d2 : Infinity, d3 < thick3 ? d3 : Infinity);
-            if (minDist === Infinity)
+            let bestDist = Infinity;
+            let bestTrail = 0;
+            for (const L of baseLayers) {
+                for (let ti = 0; ti < TRAILS; ti++) {
+                    const t = elapsed - ti * TRAIL_STEP;
+                    const waveY = L.center + Math.sin(phaseShift * L.freq + t * L.speed + L.phase) * L.amp;
+                    const d = Math.abs(rowF - waveY);
+                    // Thickness widens slightly on the "head" (ti==0) so the leading
+                    // edge reads as denser than the fading trail.
+                    const effThick = L.thick * (1 - ti * 0.18);
+                    if (d < effThick && d < bestDist) {
+                        bestDist = d;
+                        bestTrail = ti;
+                    }
+                }
+            }
+            if (bestDist === Infinity)
                 continue;
-            const ch = distToChar(minDist);
+            const ch = distToChar(bestDist);
             if (ch === " ")
                 continue;
-            const bright = theme.colorEnabled && minDist < 0.5;
-            const dim = theme.colorEnabled && minDist > 1.5;
+            // Colour tier combines proximity to the wave centre with trail index.
+            // Head of the wave gets accent/bright; trail samples step down.
             let cell = ch;
-            if (bright)
-                cell = theme.bright + ch + theme.reset;
-            else if (dim)
-                cell = theme.dim + ch + theme.reset;
-            else if (theme.colorEnabled)
-                cell = theme.normal + ch + theme.reset;
+            if (theme.colorEnabled) {
+                const isHead = bestTrail === 0;
+                if (isHead && bestDist < 0.5)
+                    cell = song.accent + ch + song.reset;
+                else if (isHead)
+                    cell = song.bright + ch + song.reset;
+                else if (bestTrail === 1)
+                    cell = song.normal + ch + song.reset;
+                else
+                    cell = song.dim + ch + song.reset;
+            }
             renderer.write(col, absRow, cell);
+        }
+    }
+    // Multi-ring overlay (both ASCII and braille paths use this).
+    renderBeatRings(state, renderer, region, W, H, theme);
+}
+/**
+ * Render up to N concurrent expanding beat rings from state.ringQueue.
+ * Each ring bloom has a fixed ~800ms lifetime and decays from bright
+ * accent → dim as its radius grows.  Multiple concurrent rings give
+ * the field a sense of *rhythm-history* — you can see the last few beats
+ * drifting outward.
+ */
+function renderBeatRings(state, renderer, region, W, H, theme) {
+    const song = state.songTheme;
+    const ringLifetime = 0.8;
+    const now = Date.now();
+    const cx = W / 2;
+    const rcy = H / 2;
+    const maxR = Math.min(W / 2, H) * 0.95;
+    for (const ring of state.ringQueue) {
+        const age = (now - ring.ms) / 1000;
+        if (age < 0 || age > ringLifetime)
+            continue;
+        const ringAge = age / ringLifetime;
+        const radius = ringAge * maxR * (0.5 + ring.strength * 0.6);
+        const thickness = 0.8 + (1 - ringAge) * 0.6;
+        // Glyph steps down as the ring ages.
+        const primary = song.ringGlyph;
+        const glyph = ringAge < 0.35 ? primary : ringAge < 0.7 ? "." : " ";
+        if (glyph === " ")
+            continue;
+        const step = 1 / Math.max(8, radius * 4);
+        for (let t = 0; t < 1; t += step) {
+            const theta = t * 2 * Math.PI;
+            const colF = cx + Math.cos(theta) * radius;
+            const rowF = rcy + Math.sin(theta) * radius * 0.5;
+            const col = Math.round(colF);
+            const rowI = Math.round(rowF);
+            if (col < 0 || col >= W || rowI < 0 || rowI >= H)
+                continue;
+            const dx = colF - col;
+            const dy = (rowF - rowI) * 2;
+            if (Math.hypot(dx, dy) > thickness * 0.5)
+                continue;
+            let cell = glyph;
+            if (theme.colorEnabled) {
+                // Newest rings pop with accent; older rings fade through bright/normal/dim.
+                if (ringAge < 0.25)
+                    cell = song.accent + glyph + song.reset;
+                else if (ringAge < 0.55)
+                    cell = song.bright + glyph + song.reset;
+                else if (ringAge < 0.8)
+                    cell = song.normal + glyph + song.reset;
+                else
+                    cell = song.dim + glyph + song.reset;
+            }
+            renderer.write(col, region.y + rowI, cell);
         }
     }
 }

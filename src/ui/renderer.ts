@@ -33,14 +33,42 @@ export class Renderer {
 
   /**
    * Write a string starting at column x, row y.
+   * ANSI SGR escapes (\x1b[...m) are treated as zero-width and bound to the
+   * following visible char in the same cell, so a write advances by VISIBLE
+   * columns rather than raw string length. Trailing escapes (e.g. a reset)
+   * attach to the last visible char written. This keeps writes atomic per
+   * cell so subsequent writes can't clobber partial escape sequences.
    * Characters that fall outside the buffer are silently clipped.
    */
   write(x: number, y: number, text: string): void {
     if (y < 0 || y >= this.rows) return;
-    for (let i = 0; i < text.length; i++) {
-      const cx = x + i;
-      if (cx < 0 || cx >= this.cols) continue;
-      this.cells[y * this.cols + cx] = text[i];
+    let i = 0;
+    let cx = x;
+    let pending = "";
+    let lastCx = -1;
+    const n = text.length;
+    while (i < n) {
+      if (text.charCodeAt(i) === 0x1b && i + 1 < n && text[i + 1] === "[") {
+        let j = i + 2;
+        while (j < n) {
+          const ch = text.charCodeAt(j);
+          if ((ch >= 0x40 && ch <= 0x7e)) { j++; break; }
+          j++;
+        }
+        pending += text.slice(i, j);
+        i = j;
+        continue;
+      }
+      if (cx >= 0 && cx < this.cols) {
+        this.cells[y * this.cols + cx] = pending + text[i];
+        lastCx = cx;
+      }
+      pending = "";
+      cx++;
+      i++;
+    }
+    if (pending && lastCx >= 0) {
+      this.cells[y * this.cols + lastCx] += pending;
     }
   }
 
