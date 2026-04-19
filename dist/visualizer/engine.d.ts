@@ -1,46 +1,56 @@
 /**
- * Visualizer engine.
+ * VisualizerEngine — Ratatui-pattern architecture.
  *
- * Coordinates:
- *   - Analyzer frame intake → visual state
- *   - Desktop player metadata polling
- *   - Render loop
- *   - Keyboard transport controls
+ * Responsibilities:
+ *   - Coordinate background services: AudioSource, CavaStream, LyricsService
+ *   - Maintain a single VisState (mutated only by service handlers + render tick)
+ *   - Run the render loop: compute constraint layout → dispatch pure widget functions
+ *   - Handle keyboard input
+ *
+ * Layout (computed each frame via tui.ts):
+ *
+ *   ┌── search bar (1 row, full width) ────────────────────────┐
+ *   ├─────────────────────┬────────────────────────────────────┤
+ *   │  Record Deck (50 %) │  Lyrics Terminal (50 % × 50 %)     │
+ *   │  ─ now playing      ├────────────────────────────────────┤
+ *   │  ─ platter          │  Wave Panel     (50 % × 50 %)      │
+ *   │  ─ progress│grille  │                                    │
+ *   │  ─ album art        │                                    │
+ *   └─────────────────────┴────────────────────────────────────┘
  */
-import type { AnalysisSource } from "../analysis/AnalysisSource.js";
+import type { AudioSource } from "../audio/AudioSource.js";
 import type { VisMode } from "./state.js";
-import type { PlayerBackend } from "../player/types.js";
 export interface EngineOptions {
     mode: VisMode;
     numBars: number;
     fps: number;
+    sampleRate: number;
     asciiSafe: boolean;
     noColor: boolean;
 }
 export declare class VisualizerEngine {
-    private static readonly PLAYING_POLL_MS;
-    private static readonly IDLE_POLL_MS;
-    private readonly player;
-    private readonly analysis;
-    private readonly opts;
+    private audio;
+    private opts;
     private state;
     private renderer;
     private theme;
+    private peak;
     private running;
     private renderTimer;
-    private playerTimer;
-    private playerPollInFlight;
-    private lastFrameMs;
-    constructor(player: PlayerBackend, analysis: AnalysisSource, opts: EngineOptions);
+    private spotifyTimer;
+    private cava;
+    private songTracker;
+    private themeRefreshCounter;
+    constructor(audio: AudioSource, opts: EngineOptions);
     start(): Promise<void>;
     stop(): Promise<void>;
-    private processAnalysisFrame;
-    private pollPlayer;
-    private schedulePlayerPoll;
-    private nextPlayerPollDelay;
-    private runPlayerPollLoop;
-    private requestImmediatePlayerPoll;
+    private startCava;
+    private processAudioFrame;
+    private pollSpotify;
+    private fetchLyricsForTrack;
+    private rebuildSongTheme;
     private renderFrame;
+    private syncLyrics;
     private handleAction;
 }
 //# sourceMappingURL=engine.d.ts.map

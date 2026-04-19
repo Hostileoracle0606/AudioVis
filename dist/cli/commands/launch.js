@@ -7,14 +7,15 @@ exports.registerLaunch = registerLaunch;
 const picocolors_1 = __importDefault(require("picocolors"));
 const store_js_1 = require("../../config/store.js");
 const setup_js_1 = require("../../macos/setup.js");
+const auth_js_1 = require("../../spotify/auth.js");
+const tokenStore_js_1 = require("../../spotify/tokenStore.js");
 const errors_js_1 = require("../../utils/errors.js");
-const state_js_1 = require("../../visualizer/state.js");
 const visualizer_js_1 = require("./visualizer.js");
 function registerLaunch(program) {
     program
         .command("launch")
         .description("Prepare the app, then launch the visualizer")
-        .option(`--mode <${state_js_1.VIS_MODE_IDS.join("|")}>`, "Visualization mode", "wavefield")
+        .option("--mode <wavefield|scroll|spectrum>", "Visualization mode", "wavefield")
         .option("--bars <n>", "Number of spectrum bars", "32")
         .option("--fps <n>", "Target frames per second", "30")
         .option("--sample-rate <n>", "Audio sample rate (Hz)", "44100")
@@ -24,13 +25,15 @@ function registerLaunch(program) {
         .option("--app", "Marks that the command is running from the macOS app bundle")
         .action(async (opts) => {
         try {
-            let audioDevice = (0, store_js_1.loadConfig)().runtime?.analyzerSource ??
-                (0, store_js_1.loadConfig)().audio?.macosDeviceName;
+            let audioDevice = (0, store_js_1.loadConfig)().audio?.macosDeviceName;
             if (process.platform === "darwin") {
                 const result = await (0, setup_js_1.ensureMacosReady)();
                 audioDevice = result.deviceName;
-                console.log(picocolors_1.default.dim(`Spotify Desktop detected.`));
-                console.log(picocolors_1.default.dim(`cava binary: ${result.cavaPath}`));
+            }
+            if (!(0, tokenStore_js_1.loadTokens)()) {
+                console.log(picocolors_1.default.cyan("\nSpotify login"));
+                console.log("No saved Spotify session was found, so browser login will start now.");
+                await (0, auth_js_1.login)();
             }
             await (0, visualizer_js_1.runVisualizer)({
                 ...opts,

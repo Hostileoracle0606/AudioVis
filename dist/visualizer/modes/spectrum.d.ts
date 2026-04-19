@@ -1,9 +1,13 @@
 /**
- * Spectrum visualizer mode — classic vertical bar display.
- *
- * Renders N evenly-spaced bars centered in the visualizer region.
- * Bar height is driven by smoothedBuckets from the DSP pipeline.
- * Uses block characters (or ASCII fallback) for sub-row resolution.
+ * Spectrum visualizer mode — classic vertical bar display, now with:
+ *   - Density gradient within each bar (denser chars at the base).
+ *   - Peak-hold caps with gravity decay.
+ *   - Mirrored reflection under the baseline.
+ *   - Per-song colour + glyph palette (see songTheme).
+ *   - Tempo-sweep cursor tracing across the bar field once per beat,
+ *     syncing the visualiser to the track's inferred BPM.
+ *   - Kick flare: low-band pulses briefly expand the centre bars past
+ *     their normal heights, creating a visible "thump" pulse.
  */
 import type { VisState } from "../state.js";
 import type { Renderer } from "../../ui/renderer.js";

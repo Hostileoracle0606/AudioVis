@@ -28,9 +28,11 @@ function exitAlternateScreen() {
     );
 }
 function getTerminalSize() {
+    const envCols = process.env.COLUMNS ? parseInt(process.env.COLUMNS, 10) : NaN;
+    const envRows = process.env.LINES ? parseInt(process.env.LINES, 10) : NaN;
     return {
-        cols: process.stdout.columns ?? 80,
-        rows: process.stdout.rows ?? 24,
+        cols: process.stdout.columns ?? (Number.isFinite(envCols) ? envCols : 80),
+        rows: process.stdout.rows ?? (Number.isFinite(envRows) ? envRows : 24),
     };
 }
 //# sourceMappingURL=AppScreen.js.map

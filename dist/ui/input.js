@@ -67,6 +67,12 @@ function handleKeypress(_chunk, key) {
         case "escape":
             _handler("toggle_album_art");
             break;
+        case "[":
+            _handler("cycle_background_prev");
+            break;
+        case "]":
+            _handler("cycle_background_next");
+            break;
     }
 }
 /**

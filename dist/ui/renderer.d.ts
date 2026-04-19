@@ -18,6 +18,11 @@ export declare class Renderer {
     clear(): void;
     /**
      * Write a string starting at column x, row y.
+     * ANSI SGR escapes (\x1b[...m) are treated as zero-width and bound to the
+     * following visible char in the same cell, so a write advances by VISIBLE
+     * columns rather than raw string length. Trailing escapes (e.g. a reset)
+     * attach to the last visible char written. This keeps writes atomic per
+     * cell so subsequent writes can't clobber partial escape sequences.
      * Characters that fall outside the buffer are silently clipped.
      */
     write(x: number, y: number, text: string): void;

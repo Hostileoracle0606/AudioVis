@@ -7,7 +7,9 @@ export type Action =
   | "prev"
   | "switch_mode"
   | "refresh"
-  | "toggle_album_art";
+  | "toggle_album_art"
+  | "cycle_background_prev"
+  | "cycle_background_next";
 
 type ActionHandler = (action: Action) => void;
 
@@ -66,6 +68,8 @@ function handleKeypress(
     case "r":         _handler("refresh");             break;
     case "a":         _handler("toggle_album_art");    break;
     case "escape":    _handler("toggle_album_art");    break;
+    case "[":         _handler("cycle_background_prev"); break;
+    case "]":         _handler("cycle_background_next"); break;
   }
 }
 

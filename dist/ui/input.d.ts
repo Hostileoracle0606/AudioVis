@@ -1,4 +1,4 @@
-export type Action = "quit" | "toggle_play" | "next" | "prev" | "switch_mode" | "refresh" | "toggle_album_art";
+export type Action = "quit" | "toggle_play" | "next" | "prev" | "switch_mode" | "refresh" | "toggle_album_art" | "cycle_background_prev" | "cycle_background_next";
 type ActionHandler = (action: Action) => void;
 /**
  * Enable raw key input and mouse reporting, register an action handler.

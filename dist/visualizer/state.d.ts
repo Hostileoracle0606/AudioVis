@@ -1,6 +1,9 @@
-import type { AnalysisFrame as MotionFrame, StyleProfile } from "../spotify/styleProfile.js";
-export declare const VIS_MODE_IDS: readonly ["wavefield", "scroll", "spectrum", "skyline", "fire", "tunnel", "topographic"];
-export type VisMode = typeof VIS_MODE_IDS[number];
+import type { AsciiArt } from "../album/converter.js";
+import type { SongFeatures } from "../dsp/songFeatures.js";
+import type { SongTheme } from "./songTheme.js";
+import type { LyricLine } from "../lyrics/lrclib.js";
+export type VisMode = "player" | "wavefield" | "scroll" | "spectrum" | "album-art";
+export type BackgroundMode = "wavefield" | "scroll" | "spectrum";
 export interface VisState {
     mode: VisMode;
     smoothedBuckets: Float32Array;
@@ -13,21 +16,56 @@ export interface VisState {
     trackName: string;
     artistName: string;
     albumName: string;
-    appName: string;
+    deviceName: string;
     isPlaying: boolean;
     progressMs: number;
     durationMs: number;
-    statusMessage: string;
-    analysisFrame: MotionFrame;
-    styleProfile: StyleProfile;
-    pitchHue: number;
-    targetPitchHue: number;
-    pitchSaturation: number;
+    albumArt: AsciiArt | null;
+    albumArtUrl: string;
+    priorMode: VisMode;
     cols: number;
     rows: number;
     startTime: number;
     numBars: number;
-    modeData: Record<string, unknown>;
+    scrollHistory: Float32Array;
+    peakHold: Float32Array;
+    lastPulseMs: number;
+    lastPulseStrength: number;
+    ringQueue: {
+        ms: number;
+        strength: number;
+    }[];
+    particles: Particle[];
+    songFeatures: SongFeatures;
+    songTheme: SongTheme;
+    currentTrackId: string;
+    backgroundMode: BackgroundMode;
+    searchQuery: string;
+    searchFocused: boolean;
+    platterPhase: number;
+    grillePulseRow: number;
+    grillePulseUntilMs: number;
+    lyricsLines: string[];
+    lyricsCycleMs: number;
+    lyricsIdx: number;
+    sideWavePhase: number;
+    lrcLines: LyricLine[];
+    activeLyricIdx: number;
+    lyricRevealedChars: number;
+    lyricRevealStartMs: number;
+    lyricFetchKey: string;
+    lyricFetchState: "idle" | "fetching" | "ready" | "none";
+    cavaBars: Float32Array;
+    cavaActive: boolean;
+}
+export interface Particle {
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    life: number;
+    lifeDecay: number;
+    glyph: string;
 }
 export declare function createInitialState(mode: VisMode, numBars: number, cols: number, rows: number): VisState;
 //# sourceMappingURL=state.d.ts.map
