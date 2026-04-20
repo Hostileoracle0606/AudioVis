@@ -117,3 +117,15 @@ export async function play(): Promise<void>          { await tell("play"); }
 export async function pause(): Promise<void>         { await tell("pause"); }
 export async function nextTrack(): Promise<void>     { await tell("next track"); }
 export async function previousTrack(): Promise<void> { await tell("previous track"); }
+
+/**
+ * Play a Spotify track by URI. The URI must be of the form
+ * `spotify:track:<id>` — this is what `/v1/search` returns and what
+ * Spotify's AppleScript dictionary's `play track` verb accepts.
+ */
+export async function playTrack(uri: string): Promise<void> {
+  if (!/^spotify:track:[A-Za-z0-9]+$/.test(uri)) {
+    throw new Error(`Invalid Spotify track URI: ${JSON.stringify(uri)} (expected form spotify:track:<id>)`);
+  }
+  await tell(`play track "${uri}"`);
+}
