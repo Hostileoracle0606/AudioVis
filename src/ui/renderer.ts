@@ -104,6 +104,18 @@ export class Renderer {
     process.stdout.write("\x1b[H" + lines.join("\n"));
   }
 
+  /** Test-only: return current cell buffer rows with SGR stripped. */
+  debugLines(): string[] {
+    const out: string[] = [];
+    for (let row = 0; row < this.rows; row++) {
+      const raw = this.cells
+        .slice(row * this.cols, row * this.cols + this.cols)
+        .join("");
+      out.push(raw.replace(/\x1b\[[0-9;]*m/g, ""));
+    }
+    return out;
+  }
+
   get width(): number {
     return this.cols;
   }

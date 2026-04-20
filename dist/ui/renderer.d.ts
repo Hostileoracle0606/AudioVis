@@ -39,6 +39,8 @@ export declare class Renderer {
      * Moves cursor to top-left first (no full clear = less flicker).
      */
     flush(): void;
+    /** Test-only: return current cell buffer rows with SGR stripped. */
+    debugLines(): string[];
     get width(): number;
     get height(): number;
 }

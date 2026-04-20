@@ -100,6 +100,17 @@ class Renderer {
         // ESC[H = cursor home (top-left), no screen clear
         process.stdout.write("\x1b[H" + lines.join("\n"));
     }
+    /** Test-only: return current cell buffer rows with SGR stripped. */
+    debugLines() {
+        const out = [];
+        for (let row = 0; row < this.rows; row++) {
+            const raw = this.cells
+                .slice(row * this.cols, row * this.cols + this.cols)
+                .join("");
+            out.push(raw.replace(/\x1b\[[0-9;]*m/g, ""));
+        }
+        return out;
+    }
     get width() {
         return this.cols;
     }
