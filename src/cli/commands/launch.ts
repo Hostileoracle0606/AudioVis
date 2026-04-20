@@ -3,7 +3,6 @@ import pc from "picocolors";
 import { loadConfig } from "../../config/store.js";
 import { ensureMacosReady } from "../../macos/setup.js";
 import { fatalError } from "../../utils/errors.js";
-import { VIS_MODE_IDS } from "../../visualizer/state.js";
 import { runVisualizer } from "./visualizer.js";
 
 interface LaunchOptions {
@@ -21,7 +20,7 @@ export function registerLaunch(program: Command): void {
   program
     .command("launch")
     .description("Prepare the app, then launch the visualizer")
-    .option(`--mode <${VIS_MODE_IDS.join("|")}>`, "Visualization mode", "wavefield")
+    .option("--mode <player|wavefield|scroll|spectrum|album-art>", "Visualization mode", "wavefield")
     .option("--bars <n>", "Number of spectrum bars", "32")
     .option("--fps <n>", "Target frames per second", "30")
     .option("--sample-rate <n>", "Audio sample rate (Hz)", "44100")
@@ -31,15 +30,12 @@ export function registerLaunch(program: Command): void {
     .option("--app", "Marks that the command is running from the macOS app bundle")
     .action(async (opts: LaunchOptions) => {
       try {
-        let audioDevice =
-          loadConfig().runtime?.analyzerSource ??
-          loadConfig().audio?.macosDeviceName;
+        let audioDevice = loadConfig().audio?.macosDeviceName;
 
         if (process.platform === "darwin") {
           const result = await ensureMacosReady();
           audioDevice = result.deviceName;
           console.log(pc.dim(`Spotify Desktop detected.`));
-          console.log(pc.dim(`cava binary: ${result.cavaPath}`));
         }
 
         await runVisualizer({
