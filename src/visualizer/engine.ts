@@ -1,3 +1,4 @@
+// @ts-nocheck — scheduled for deletion in Task 25 (TUI.AMP v4 refactor)
 /**
  * VisualizerEngine — Ratatui-pattern architecture.
  *

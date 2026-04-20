@@ -1,97 +1,79 @@
 import readline from "readline";
 
-export type Action =
+export type HotkeyAction =
   | "quit"
   | "toggle_play"
   | "next"
   | "prev"
-  | "switch_mode"
-  | "refresh"
-  | "toggle_album_art"
-  | "cycle_background_prev"
-  | "cycle_background_next";
+  | "mute"
+  | "cycle_palette"
+  | "toggle_art"
+  | "focus_search";
 
-type ActionHandler = (action: Action) => void;
+export type InputEvent =
+  | { kind: "hotkey"; action: HotkeyAction }
+  | { kind: "text"; char: string }
+  | { kind: "edit"; op: "backspace" | "enter" | "escape" }
+  | { kind: "nav"; dir: "up" | "down" | "left" | "right" }
+  | { kind: "quit" };
 
-let _handler: ActionHandler | null = null;
-let _rawMode = false;
+export type InputMode = "hotkey" | "text";
 
-/**
- * Enable raw key input and mouse reporting, register an action handler.
- */
-export function startInput(handler: ActionHandler): void {
-  _handler = handler;
+type Key = { name?: string; sequence?: string; ctrl?: boolean };
 
-  if (!_rawMode) {
-    readline.emitKeypressEvents(process.stdin);
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(true);
-    }
-    _rawMode = true;
+const HOTKEYS: Record<string, HotkeyAction> = {
+  "q":  "quit",
+  "p":  "toggle_play",
+  "n":  "next",
+  "b":  "prev",
+  "m":  "mute",
+  "v":  "cycle_palette",
+  "a":  "toggle_art",
+  "/":  "focus_search",
+};
+
+export function dispatchKey(
+  getMode: () => InputMode,
+  emit: (e: InputEvent) => void,
+  key: Key,
+): void {
+  if (key.ctrl && key.name === "c") { emit({ kind: "quit" }); return; }
+  const mode = getMode();
+  if (mode === "hotkey") {
+    const name = key.name ?? key.sequence ?? "";
+    const act = HOTKEYS[name];
+    if (act) emit({ kind: "hotkey", action: act });
+    return;
   }
+  switch (key.name) {
+    case "backspace": emit({ kind: "edit", op: "backspace" }); return;
+    case "return":    emit({ kind: "edit", op: "enter" }); return;
+    case "escape":    emit({ kind: "edit", op: "escape" }); return;
+    case "up":        emit({ kind: "nav", dir: "up" }); return;
+    case "down":      emit({ kind: "nav", dir: "down" }); return;
+    case "left":      emit({ kind: "nav", dir: "left" }); return;
+    case "right":     emit({ kind: "nav", dir: "right" }); return;
+  }
+  const ch = key.sequence && key.sequence.length === 1 ? key.sequence : "";
+  if (ch && ch >= " " && ch <= "~") emit({ kind: "text", char: ch });
+}
 
-  // Enable X10 mouse click reporting (button press only, no motion)
-  process.stdout.write("\x1b[?1000h");
+let _installed = false;
 
-  process.stdin.on("keypress", handleKeypress);
-  process.stdin.on("data", handleData);
+export function startInput(
+  getMode: () => InputMode,
+  emit: (e: InputEvent) => void,
+): void {
+  if (_installed) return;
+  _installed = true;
+  readline.emitKeypressEvents(process.stdin);
+  if (process.stdin.isTTY) process.stdin.setRawMode(true);
+  process.stdin.on("keypress", (_s: string, key: Key) => dispatchKey(getMode, emit, key));
 }
 
 export function stopInput(): void {
-  process.stdout.write("\x1b[?1000l"); // disable mouse reporting
-  process.stdin.removeListener("keypress", handleKeypress);
-  process.stdin.removeListener("data", handleData);
-  if (_rawMode && process.stdin.isTTY) {
-    process.stdin.setRawMode(false);
-    _rawMode = false;
-  }
-  _handler = null;
-}
-
-function handleKeypress(
-  _chunk: string,
-  key: { name?: string; ctrl?: boolean; sequence?: string }
-): void {
-  if (!_handler) return;
-
-  if (key.ctrl && key.name === "c") {
-    _handler("quit");
-    return;
-  }
-
-  switch (key.name ?? _chunk) {
-    case "q":         _handler("quit");               break;
-    case "space":     _handler("toggle_play");         break;
-    case "n":         _handler("next");                break;
-    case "p":         _handler("prev");                break;
-    case "s":         _handler("switch_mode");         break;
-    case "r":         _handler("refresh");             break;
-    case "a":         _handler("toggle_album_art");    break;
-    case "escape":    _handler("toggle_album_art");    break;
-    case "[":         _handler("cycle_background_prev"); break;
-    case "]":         _handler("cycle_background_next"); break;
-  }
-}
-
-/**
- * Parse raw stdin bytes for ANSI mouse sequences.
- * X10 format: ESC [ M <cb> <cx> <cy>
- *   cb = button byte: cb & 3 === 0 → left button press
- *   cx, cy = 1-based column and row (offset by 32)
- */
-function handleData(data: Buffer): void {
-  if (!_handler) return;
-  if (data.length < 6) return;
-  if (data[0] !== 0x1b || data[1] !== 0x5b || data[2] !== 0x4d) return; // ESC [ M
-
-  const cb  = data[3] - 32;
-  const col = data[4] - 32 - 1; // convert to 0-based
-  const row = data[5] - 32 - 1; // convert to 0-based
-
-  const isLeftPress = (cb & 3) === 0;
-  const isHeaderRow = row === 0 || row === 1;
-
-  if (isLeftPress && isHeaderRow) {
-    _handler("toggle_album_art");
-  }
+  if (!_installed) return;
+  _installed = false;
+  if (process.stdin.isTTY) process.stdin.setRawMode(false);
+  process.stdin.removeAllListeners("keypress");
 }
