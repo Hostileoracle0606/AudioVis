@@ -33,7 +33,8 @@ export function createMacosAudioSource(opts: AudioSourceOptions): AudioSource {
   let proc: ChildProcess | null = null;
   const listeners: Array<(frame: Float32Array) => void> = [];
   let buffer = Buffer.alloc(0);
-  const bytesPerFrame = frameSize * 4;
+  const NUM_CHANNELS = 2;
+  const bytesPerFrame = frameSize * NUM_CHANNELS * 4;  // interleaved stereo f32le
 
   if (!deviceName) {
     // Fail immediately with a helpful message rather than silently capturing
@@ -51,7 +52,7 @@ export function createMacosAudioSource(opts: AudioSourceOptions): AudioSource {
     );
     // Return a source that immediately throws on start().
     return {
-      getInfo: () => ({ platform: "macos", device: "none", sampleRate, frameSize }),
+      getInfo: () => ({ platform: "macos", device: "none", sampleRate, frameSize, numChannels: NUM_CHANNELS }),
       onFrame: () => {},
       start: async () => { throw err; },
       stop: async () => {},
@@ -66,7 +67,7 @@ export function createMacosAudioSource(opts: AudioSourceOptions): AudioSource {
       "-hide_banner", "-loglevel", "error",
       "-f", "avfoundation",
       "-i", avfDevice,
-      "-ac", "1",
+      "-ac", String(NUM_CHANNELS),
       "-ar", String(sampleRate),
       "-f", "f32le",
       "pipe:1",
@@ -75,7 +76,7 @@ export function createMacosAudioSource(opts: AudioSourceOptions): AudioSource {
 
   return {
     getInfo(): AudioSourceInfo {
-      return { platform: "macos", device: deviceName as string, sampleRate, frameSize };
+      return { platform: "macos", device: deviceName as string, sampleRate, frameSize, numChannels: NUM_CHANNELS };
     },
 
     onFrame(cb: (frame: Float32Array) => void): void {
@@ -111,7 +112,7 @@ export function createMacosAudioSource(opts: AudioSourceOptions): AudioSource {
             const fa = new Float32Array(
               frameBuffer.buffer,
               frameBuffer.byteOffset,
-              frameSize
+              frameSize * NUM_CHANNELS
             );
             for (const cb of listeners) cb(fa);
           }

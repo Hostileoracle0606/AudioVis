@@ -11,13 +11,14 @@ exports.createSilentAudioSource = createSilentAudioSource;
 function createSilentAudioSource(opts) {
     const { sampleRate, frameSize } = opts;
     const listeners = [];
-    const zeros = new Float32Array(frameSize);
+    const NUM_CHANNELS = 2;
+    const zeros = new Float32Array(frameSize * NUM_CHANNELS); // interleaved stereo
     let timer = null;
     // Emit frames at ~30 Hz (matching the default render FPS)
     const intervalMs = Math.round(1000 / 30);
     return {
         getInfo() {
-            return { platform: process.platform, device: "silent", sampleRate, frameSize };
+            return { platform: process.platform, device: "silent", sampleRate, frameSize, numChannels: NUM_CHANNELS };
         },
         onFrame(cb) {
             listeners.push(cb);

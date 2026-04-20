@@ -2,8 +2,10 @@
  * AudioSource — interface for platform audio capture backends.
  *
  * Each backend spawns a child process (e.g. parecord, ffmpeg) that
- * streams raw mono f32le PCM to stdout, which this layer reads and
- * delivers as Float32Array frames.
+ * streams raw **stereo interleaved** f32le PCM to stdout. Consumers that
+ * need mono (e.g. FFT) mix down via dsp/deinterleave.mixToMono; consumers
+ * that need per-channel data (e.g. L/R metering) read channels directly
+ * from the interleaved frame.
  */
 export interface AudioSourceOptions {
     sampleRate: number;
@@ -15,6 +17,7 @@ export interface AudioSourceInfo {
     device: string;
     sampleRate: number;
     frameSize: number;
+    numChannels: number;
 }
 export interface AudioSource {
     start(): Promise<void>;
