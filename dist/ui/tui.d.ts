@@ -5,8 +5,12 @@
  *   const [searchR, bodyR] = vSplit(frame, [C.length(1), C.fill()]);
  *   const [leftR, rightR] = hSplit(bodyR, [C.percent(50), C.percent(50)]);
  */
-import type { Region } from "./layout.js";
-export type { Region };
+export interface Region {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
 export type Constraint = {
     kind: "length";
     n: number;

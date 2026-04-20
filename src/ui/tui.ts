@@ -6,10 +6,12 @@
  *   const [leftR, rightR] = hSplit(bodyR, [C.percent(50), C.percent(50)]);
  */
 
-import type { Region } from "./layout.js";
-
-// Re-export Region so callers can import everything from one place.
-export type { Region };
+export interface Region {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 export type Constraint =
   | { kind: "length";  n: number }   // exactly N cells
