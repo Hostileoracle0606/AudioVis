@@ -1,5 +1,5 @@
 export interface PeakHoldBuffer {
-  values: Float64Array;
+  values: Float32Array;
   heldUntilMs: Float64Array;
   lastUpdateMs: number;
 }
@@ -9,7 +9,7 @@ const DECAY_PER_MS = 0.0002;
 
 export function createPeakHold(size: number): PeakHoldBuffer {
   return {
-    values: new Float64Array(size),
+    values: new Float32Array(size),
     heldUntilMs: new Float64Array(size),
     lastUpdateMs: 0,
   };
