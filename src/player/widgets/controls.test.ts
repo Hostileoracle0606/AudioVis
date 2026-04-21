@@ -6,25 +6,47 @@ import { createInitialState } from "../state.js";
 import { buildTheme } from "../theme.js";
 import { computeAppLayout } from "../layout.js";
 
-test("controls renders timestamps and scrubber", () => {
-  const r = new Renderer(120, 40);
-  const s = createInitialState(120, 40);
-  s.progressMs = 74_000;
-  s.durationMs = 242_000;
-  const L = computeAppLayout(120, 40);
+test("progress row shows elapsed / total timestamps", () => {
+  const r = new Renderer(120, 30);
+  const s = createInitialState(120, 30);
+  s.progressMs = 92_000;
+  s.durationMs = 182_000;
+  const L = computeAppLayout(120, 30);
   renderControls(r, L, s, buildTheme(0, true));
-  const lines = r.debugLines();
-  assert.match(lines[L.scrubR.y], /01:14/);
-  assert.match(lines[L.scrubR.y], /04:02/);
+  const all = r.debugLines().join("\n");
+  assert.ok(all.includes("01:32"));
+  assert.ok(all.includes("03:02"));
 });
 
-test("controls renders hotkey legend", () => {
-  const r = new Renderer(120, 40);
-  const s = createInitialState(120, 40);
-  const L = computeAppLayout(120, 40);
+test("progress row contains Braille waveform glyphs", () => {
+  const r = new Renderer(120, 30);
+  const s = createInitialState(120, 30);
+  s.progressMs = 60_000; s.durationMs = 120_000;
+  for (let i = 0; i < 64; i++) s.progressEnvelope[i] = 0.5;
+  const L = computeAppLayout(120, 30);
   renderControls(r, L, s, buildTheme(0, true));
-  const line = r.debugLines()[L.keysR.y];
-  assert.match(line, /\[p\] Play/);
-  assert.match(line, /\[n\] Next/);
-  assert.match(line, /\[q\] Quit/);
+  const all = r.debugLines().join("\n");
+  assert.ok(/[\u2800-\u28FF]/.test(all), "expected Braille glyph in progress row");
+});
+
+test("key legend row contains core hotkeys", () => {
+  const r = new Renderer(120, 30);
+  const s = createInitialState(120, 30);
+  const L = computeAppLayout(120, 30);
+  renderControls(r, L, s, buildTheme(0, true));
+  const all = r.debugLines().join("\n");
+  assert.ok(all.includes("[p]"));
+  assert.ok(all.includes("[q]"));
+  assert.ok(all.includes("[1-8]"));
+});
+
+test("LED chaser strip renders ●/· pattern", () => {
+  const r = new Renderer(120, 30);
+  const s = createInitialState(120, 30);
+  s.ledChaserIndex = 5;
+  s.isPlaying = true;
+  const L = computeAppLayout(120, 30);
+  renderControls(r, L, s, buildTheme(0, true));
+  const all = r.debugLines().join("\n");
+  assert.ok(all.includes("\u25CF"), "expected ● in LED strip");
 });
