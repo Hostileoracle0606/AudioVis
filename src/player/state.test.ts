@@ -44,3 +44,15 @@ test("pushRecentlyPlayed caps at 8 entries", () => {
   assert.strictEqual(s.recentlyPlayed[0].trackName, "t-19");
   assert.strictEqual(s.recentlyPlayed[7].trackName, "t-12");
 });
+
+test("createInitialState includes new reactivity fields", () => {
+  const s = createInitialState(100, 30);
+  assert.strictEqual(s.lastTransientAt, 0);
+  assert.strictEqual(s.lastClipAt, 0);
+  assert.strictEqual(s.lastPeakAt, 0);
+  assert.strictEqual(s.progressEnvelope.length, 128);
+  assert.strictEqual(s.ledChaserIndex, 0);
+  assert.strictEqual(s.activePadIndex, 0);
+  assert.ok(Array.isArray(s.padFingerprints));
+  assert.strictEqual(s.padFingerprints.length, 8);
+});

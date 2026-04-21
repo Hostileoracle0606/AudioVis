@@ -53,6 +53,14 @@ export interface AppState {
   isMuted: boolean;
   savedVolume: number;
 
+  lastTransientAt: number;
+  lastClipAt: number;
+  lastPeakAt: number;
+  progressEnvelope: Float32Array;
+  ledChaserIndex: number;
+  activePadIndex: number;
+  padFingerprints: Uint8Array[];
+
   quit: boolean;
 }
 
@@ -73,6 +81,11 @@ export function createInitialState(cols: number, rows: number): AppState {
     spectrumPaletteIndex: 0,
     artCellMode: "art",
     isMuted: false, savedVolume: 50,
+    lastTransientAt: 0, lastClipAt: 0, lastPeakAt: 0,
+    progressEnvelope: new Float32Array(128),
+    ledChaserIndex: 0,
+    activePadIndex: 0,
+    padFingerprints: Array.from({ length: 8 }, () => new Uint8Array(16)),
     quit: false,
   };
 }
