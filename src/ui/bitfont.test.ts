@@ -39,7 +39,28 @@ test("renderBigLine handles missing glyph by substituting space", () => {
   for (const r of rows) assert.match(r, /^ +$/);
 });
 
-import { compressToHalfBlock } from "./bitfont.js";
+import { compressToHalfBlock, renderMiniLine, renderTinyLine } from "./bitfont.js";
+
+test("renderMiniLine emits 3 terminal rows of half-block glyphs", () => {
+  const rows = renderMiniLine("HI");
+  assert.strictEqual(rows.length, 3);
+  for (const row of rows) assert.ok(row.length > 0);
+});
+
+test("renderTinyLine emits 2 terminal rows of half-block glyphs", () => {
+  const rows = renderTinyLine("HI");
+  assert.strictEqual(rows.length, 2);
+  for (const row of rows) assert.ok(row.length > 0);
+});
+
+test("renderTinyLine width per char is ~4 cols (3 glyph + 1 separator)", () => {
+  const one = renderTinyLine("A")[0].length;
+  const two = renderTinyLine("AB")[0].length;
+  const three = renderTinyLine("ABC")[0].length;
+  assert.strictEqual(one, 3);
+  assert.strictEqual(two, 3 + 1 + 3);
+  assert.strictEqual(three, 3 + 1 + 3 + 1 + 3);
+});
 
 test("compressToHalfBlock halves row count", () => {
   const lines = renderBigLine("HI");

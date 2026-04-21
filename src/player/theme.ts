@@ -28,6 +28,23 @@ const BRIGHT_ACCENTS = [PALETTE_WARM_BRIGHT, PALETTE_TEAL_BRIGHT, PALETTE_MAGENT
 
 export const PALETTE_COUNT = PALETTES.length;
 
+// Shared "on-air" blink cadence — a single place so every widget that
+// shows a recording-indicator-style blink stays in sync and updates to
+// the same period/duty cycle at once. Slow enough to feel like a studio
+// tally light, not fast enough to read as "alarm".
+export const BLINK_PERIOD_MS = 1800;
+export const BLINK_DUTY = 0.60; // 60 % on-time
+
+/** True when the blink is in its on-phase at `nowMs`. */
+export function blinkOn(nowMs: number): boolean {
+  return (nowMs % BLINK_PERIOD_MS) < BLINK_PERIOD_MS * BLINK_DUTY;
+}
+
+/** Theme-aware on-air colour: bright accent when on, dim when off. */
+export function blinkColor(theme: Theme, nowMs: number): string {
+  return blinkOn(nowMs) ? theme.accentBright : theme.dim;
+}
+
 export function buildTheme(paletteIndex: number, noColor: boolean): Theme {
   if (noColor) {
     return {

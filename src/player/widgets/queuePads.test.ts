@@ -5,45 +5,67 @@ import { renderQueuePads } from "./queuePads.js";
 import { createInitialState } from "../state.js";
 import { buildTheme } from "../theme.js";
 
+const REGION = { x: 0, y: 0, width: 40, height: 15 };
+
+function setNowPlaying(s: ReturnType<typeof createInitialState>, trackName: string, artistName: string): void {
+  s.nowPlaying = {
+    trackName, artistName,
+    albumName: "a", albumArtUrl: "", deviceName: "s",
+    isPlaying: true, progressMs: 0, durationMs: 0,
+  };
+}
+
 test("renderQueuePads draws 8 pads with indices 01-08", () => {
   const r = new Renderer(40, 15);
   const s = createInitialState(40, 15);
-  renderQueuePads(r, { x: 0, y: 0, width: 40, height: 15 }, s, buildTheme(0, true));
+  renderQueuePads(r, REGION, s, buildTheme(0, true));
   const all = r.debugLines().join("\n");
   for (let i = 1; i <= 8; i++) {
     assert.ok(all.includes(String(i).padStart(2, "0")), `missing pad index ${i}`);
   }
 });
 
-test("fingerprint bits render as ● for 1s and · for 0s", () => {
+test("pads contain lit bulbs (●) driven by the beat sequencer", () => {
   const r = new Renderer(40, 15);
   const s = createInitialState(40, 15);
-  s.padFingerprints[0] = new Uint8Array(16).fill(1);
-  s.padFingerprints[1] = new Uint8Array(16).fill(0);
-  renderQueuePads(r, { x: 0, y: 0, width: 40, height: 15 }, s, buildTheme(0, true));
+  setNowPlaying(s, "hello", "world");
+  s.progressMs = 10_000;
+  renderQueuePads(r, REGION, s, buildTheme(0, true));
   const all = r.debugLines().join("\n");
-  assert.ok(all.includes("\u25CF\u25CF\u25CF\u25CF"), "expected row of ●●●● for pad 0");
+  assert.ok(all.includes("\u25CF"), "expected ≥1 lit bulb in the pad grid");
 });
 
-test("active pad index gets accent color on header", () => {
+test("active step (derived from progressMs + bpm) uses the bright accent", () => {
   const r = new Renderer(40, 15);
   const s = createInitialState(40, 15);
-  s.activePadIndex = 2;
-  renderQueuePads(r, { x: 0, y: 0, width: 40, height: 15 }, s, buildTheme(0, false));
-  const theme = buildTheme(0, false);
+  setNowPlaying(s, "hello", "world");
+  s.progressMs = 60_000;
+  const theme = buildTheme(0, true);
+  renderQueuePads(r, REGION, s, theme);
   const raw = (r as any).cells.join("");
-  assert.ok(raw.includes(theme.accent), "accent color not applied");
+  assert.ok(raw.includes(theme.accentBright), "active-step bright accent missing");
 });
 
-test("footer reflects active pad name when recentlyPlayed[0] is set", () => {
+test("header shows the current step counter and bpm", () => {
   const r = new Renderer(40, 15);
   const s = createInitialState(40, 15);
-  s.recentlyPlayed = [{
-    trackName: "hello", artistName: "world",
-    albumName: "a", albumArtUrl: "", deviceName: "s",
-    isPlaying: true, progressMs: 0, durationMs: 0,
-  }];
-  renderQueuePads(r, { x: 0, y: 0, width: 40, height: 15 }, s, buildTheme(0, true));
+  setNowPlaying(s, "hello", "world");
+  s.progressMs = 0;
+  renderQueuePads(r, REGION, s, buildTheme(0, true));
   const all = r.debugLines().join("\n");
-  assert.match(all, /hello|HEL|hel/i);
+  assert.match(all, /step\s+\d\d\/08/i);
+  assert.match(all, /\d{2,3}bpm/i);
+});
+
+test("pads pulse during a recent transient (flashing frame uses the accent)", () => {
+  const r = new Renderer(40, 15);
+  const s = createInitialState(40, 15);
+  setNowPlaying(s, "hello", "world");
+  s.progressMs = 5000;
+  s.lastTransientAt = Date.now(); // fresh hit
+  const theme = buildTheme(0, true);
+  renderQueuePads(r, REGION, s, theme);
+  const raw = (r as any).cells.join("");
+  // Inactive pads get the accent on their frame during a flash window.
+  assert.ok(raw.includes(theme.accent), "flashing frame accent missing");
 });

@@ -21,21 +21,24 @@ export function renderTitleBar(
   const ledStrip = `${theme.dim}\u25E6in\u25CF ${theme.reset}${theme.dim}\u25E6out\u25CF ${theme.reset}${syncColor}\u25E6sync\u25CF${theme.reset}${theme.dim} \u25E6midi\u25CF${theme.reset}`;
   r.write(L.brandR.x, L.brandR.y, `${theme.accent}${brand}${theme.reset} ${ledStrip}`);
 
+  // Centred key legend — occupies the former search-bar slot so the
+  // controls sit at eye-level instead of below the scrubber. Progressive
+  // shortening: try the long version first, then the medium, then short —
+  // whichever fits the slot.
   const sx = L.searchR.x;
   const sy = L.searchR.y;
   const sw = L.searchR.width;
   if (sw > 4) {
-    if (state.search.focused) {
-      const prefix = "> ";
-      const visible = state.search.query.slice(-(sw - prefix.length - 1));
-      r.write(sx + 1, sy, `${theme.fg}${prefix}${visible}${theme.reset}`);
-    } else {
-      const hint = "[ / to search ]";
-      if (hint.length + 2 <= sw) {
-        const hx = sx + Math.floor((sw - hint.length) / 2);
-        r.write(hx, sy, `${theme.dim}${hint}${theme.reset}`);
-      }
-    }
+    const options = [
+      "[p]lay  [n]ext  [b]ack  [m]ute  [v]is  [a]rt  [1-8]pad  [q]uit",
+      "[p]lay  [n]xt  [b]ck  [m]ute  [v]is  [a]rt  [q]uit",
+      "[p]lay  [n]ext  [b]ack  [m]ute  [q]uit",
+      "[p]lay [n]xt [b]ck [m]ute [q]uit",
+      "p/n/b/m/q",
+    ];
+    const legend = options.find((s) => s.length <= sw - 2) ?? options[options.length - 1];
+    const lx = sx + Math.max(1, Math.floor((sw - legend.length) / 2));
+    r.write(lx, sy, `${theme.dim}${legend}${theme.reset}`);
   }
 
   const cpu = state.cpuPct.toFixed(1).padStart(4, " ");

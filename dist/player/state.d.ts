@@ -4,14 +4,6 @@ export interface LrcLine {
     timeMs: number;
     text: string;
 }
-export interface SearchResult {
-    id: string;
-    uri: string;
-    name: string;
-    artist: string;
-    album: string;
-    durationMs: number;
-}
 export type ArtCellMode = "art" | "vu" | "blank";
 export interface AppState {
     cols: number;
@@ -32,18 +24,19 @@ export interface AppState {
     activeLyricIndex: number;
     albumArt: AsciiArt | null;
     cpuPct: number;
-    search: {
-        focused: boolean;
-        query: string;
-        results: SearchResult[];
-        selectedIndex: number;
-        loading: boolean;
-        error: string | null;
-    };
     spectrumPaletteIndex: number;
     artCellMode: ArtCellMode;
     isMuted: boolean;
     savedVolume: number;
+    progressBaselineAt: number;
+    progressBaselineMs: number;
+    lastTransientAt: number;
+    lastClipAt: number;
+    lastPeakAt: number;
+    progressEnvelope: Float32Array;
+    ledChaserIndex: number;
+    activePadIndex: number;
+    padFingerprints: Uint8Array[];
     quit: boolean;
 }
 export declare function createInitialState(cols: number, rows: number): AppState;

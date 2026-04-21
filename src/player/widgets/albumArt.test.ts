@@ -17,13 +17,15 @@ test("renderAlbumArt draws the framed [ screen · NNN ] label", () => {
   assert.match(all, /screen \u00B7 \d{3}/);
 });
 
-test("renderAlbumArt footer shows metadata row", () => {
+test("renderAlbumArt has no below-frame metadata chrome — just the framed art", () => {
   const r = new Renderer(40, 15);
   const s = createInitialState(40, 15);
   s.rms = 0.73;
   renderAlbumArt(r, { x: 0, y: 0, width: 40, height: 15 }, s, buildTheme(0, true));
   const all = r.debugLines().join("\n");
-  assert.ok(all.includes("rms 0.73"));
+  assert.ok(!all.includes("rms 0.73"), "rms metadata row should be gone");
+  assert.ok(!all.includes("ansilize"), "ansilize description row should be gone");
+  assert.ok(!all.includes("peak hold"), "peak-hold meta row should be gone");
 });
 
 test("renderAlbumArt shows — no art — when albumArt null", () => {

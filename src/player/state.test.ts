@@ -19,7 +19,6 @@ test("createInitialState returns sane defaults", () => {
   assert.strictEqual(s.rows, 40);
   assert.strictEqual(s.spectrum.length, 16);
   assert.strictEqual(s.recentlyPlayed.length, 0);
-  assert.strictEqual(s.search.focused, false);
 });
 
 test("pushRecentlyPlayed dedups same-trackName in a row", () => {

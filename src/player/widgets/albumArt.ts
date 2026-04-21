@@ -7,21 +7,28 @@ import { catalogNumber } from "../trackDna.js";
 const TL = "\u256D", TR = "\u256E", BL = "\u2570", BR = "\u256F";
 const H = "\u2500", V = "\u2502";
 
+/**
+ * Framed square screen containing the whole album-art image. The frame
+ * fills the provided region top-to-bottom; the art interior is
+ * `region.width - 2` × `region.height - 2` cells, which the feeder sizes
+ * to render a visually square image (cols = 2 × rows, since each
+ * half-block cell represents 2 vertical pixels).
+ */
 export function renderAlbumArt(
   r: Renderer,
   region: Region,
   state: AppState,
   theme: Theme,
 ): void {
-  const head = state.recentlyPlayed[0];
+  const head = state.nowPlaying ?? state.recentlyPlayed[0];
   const idSrc = head ? `${head.trackName}|${head.artistName}` : "unknown";
   const cat = catalogNumber(idSrc);
   const label = `[ screen \u00B7 ${cat} ]`;
 
-  const frameX = region.x + 1;
+  const frameX = region.x;
   const frameY = region.y;
-  const frameW = region.width - 2;
-  const frameH = region.height - 5;
+  const frameW = region.width;
+  const frameH = region.height;
 
   if (frameW < 6 || frameH < 3) return;
 
@@ -44,35 +51,32 @@ export function renderAlbumArt(
     const cx = artX + Math.floor((artW - msg.length) / 2);
     const cy = artY + Math.floor(artH / 2);
     r.write(cx, cy, `${theme.dim}${msg}${theme.reset}`);
-  } else if (state.artCellMode === "vu") {
+    return;
+  }
+  if (state.artCellMode === "vu") {
     const lvl = Math.round((state.meterL + state.meterR) / 2 * artH);
     for (let row = 0; row < artH; row++) {
       const y = artY + artH - 1 - row;
       const ch = row < lvl ? "\u2588".repeat(artW) : " ".repeat(artW);
       r.write(artX, y, `${theme.meter}${ch}${theme.reset}`);
     }
-  } else {
-    const art = state.albumArt;
-    if (!art) {
-      const msg = "\u2014 no art \u2014";
-      const cx = artX + Math.floor((artW - msg.length) / 2);
-      const cy = artY + Math.floor(artH / 2);
-      r.write(cx, cy, `${theme.dim}${msg}${theme.reset}`);
-    } else {
-      const lines = art.lines;
-      for (let i = 0; i < Math.min(artH, lines.length); i++) {
-        r.write(artX, artY + i, lines[i]);
-      }
-    }
+    return;
   }
 
-  const fy = frameY + frameH;
-  const fx = frameX;
-  const fw = frameW;
-  const pad = "\u00B7".repeat(Math.max(0, fw - 4));
-  r.write(fx, fy, `${theme.dim}  \u25E6 ansilize \u00B7 2\u00D74 braille${theme.reset}`);
-  r.write(fx, fy + 1, `${theme.dim}  \u25CF peak hold  \u00B7 \u25CF over  \u00B7 \u25CF lim${theme.reset}`);
-  const rmsTxt = state.rms.toFixed(2);
-  r.write(fx, fy + 2, `${theme.dim}  \u25E6 rms ${rmsTxt}  \u25E6 lufs ${Math.round(-20 + state.rms * 14)}${theme.reset}`);
-  r.write(fx, fy + 3, `${theme.dim}  ${pad.slice(0, fw - 4)}${theme.reset}`);
+  const art = state.albumArt;
+  if (!art) {
+    const msg = "\u2014 no art \u2014";
+    const cx = artX + Math.floor((artW - msg.length) / 2);
+    const cy = artY + Math.floor(artH / 2);
+    r.write(cx, cy, `${theme.dim}${msg}${theme.reset}`);
+    return;
+  }
+
+  const lines = art.lines;
+  // Centre vertically within the art interior so shorter renderings don't
+  // anchor to the top and expose empty rows at the bottom.
+  const startY = artY + Math.max(0, Math.floor((artH - lines.length) / 2));
+  for (let i = 0; i < Math.min(artH, lines.length); i++) {
+    r.write(artX, startY + i, lines[i]);
+  }
 }

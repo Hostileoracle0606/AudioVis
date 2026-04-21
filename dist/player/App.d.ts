@@ -9,11 +9,7 @@ export declare class App {
     private running;
     private stopCpu;
     private stopSpotify;
-    private searchDebounce;
-    private searchAbort;
     private transportDebounceAt;
-    private progressBaselineAt;
-    private progressBaselineMs;
     private readonly opts;
     constructor(opts: AppOptions);
     start(): Promise<void>;
@@ -21,8 +17,5 @@ export declare class App {
     private renderFrame;
     private handleInput;
     private handleHotkey;
-    private handleTextInput;
-    private scheduleSearch;
-    private closeSearch;
 }
 //# sourceMappingURL=App.d.ts.map

@@ -15,10 +15,15 @@ function createInitialState(cols, rows) {
         lyrics: [], activeLyricIndex: -1,
         albumArt: null,
         cpuPct: 0,
-        search: { focused: false, query: "", results: [], selectedIndex: 0, loading: false, error: null },
         spectrumPaletteIndex: 0,
         artCellMode: "art",
         isMuted: false, savedVolume: 50,
+        progressBaselineAt: 0, progressBaselineMs: 0,
+        lastTransientAt: 0, lastClipAt: 0, lastPeakAt: 0,
+        progressEnvelope: new Float32Array(128),
+        ledChaserIndex: 0,
+        activePadIndex: 0,
+        padFingerprints: Array.from({ length: 8 }, () => new Uint8Array(16)),
         quit: false,
     };
 }

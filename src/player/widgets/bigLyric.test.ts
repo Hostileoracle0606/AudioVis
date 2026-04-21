@@ -1,8 +1,24 @@
 import test from "node:test";
 import assert from "node:assert";
 import { Renderer } from "../../ui/renderer.js";
-import { renderBigLyric } from "./bigLyric.js";
+import { renderBigLyric, wrapLyric } from "./bigLyric.js";
 import { buildTheme } from "../theme.js";
+
+test("wrapLyric word-wraps at whitespace without overflowing maxChars", () => {
+  const lines = wrapLyric("CAUSE I'VE BEEN FAKING", 13);
+  for (const l of lines) assert.ok(l.length <= 13, `line too long: "${l}" (${l.length})`);
+  assert.strictEqual(lines.join(" "), "CAUSE I'VE BEEN FAKING");
+});
+
+test("wrapLyric hard-breaks words that exceed maxChars", () => {
+  const lines = wrapLyric("ANTIDISESTABLISHMENTARIAN", 6);
+  for (const l of lines) assert.ok(l.length <= 6);
+  assert.strictEqual(lines.join(""), "ANTIDISESTABLISHMENTARIAN");
+});
+
+test("wrapLyric returns [] for maxChars <= 0", () => {
+  assert.deepStrictEqual(wrapLyric("anything", 0), []);
+});
 
 test("renderBigLyric writes 4 half-block rows at region.y + 1", () => {
   const r = new Renderer(80, 10);
@@ -39,5 +55,42 @@ test("renderBigLyric clips to region width (no overflow into neighbor cells)", (
   const lines = r.debugLines();
   for (const line of lines) {
     assert.ok(line.length === 20, `line length ${line.length} !== 20`);
+  }
+});
+
+test("renderBigLyric word-wraps long lyric into stacked rows when vertical room allows", () => {
+  const r = new Renderer(120, 14);
+  // region ~100 cols → maxChars ~ floor(97/7) = 13. Two-word phrase wraps to ≥2 lines.
+  renderBigLyric(
+    r,
+    { x: 0, y: 0, width: 100, height: 12 },
+    { text: "CAUSE I'VE BEEN FAKING", bright: false },
+    buildTheme(0, true),
+  );
+  const lines = r.debugLines();
+  const glyphRowCount = lines.filter((row) => /[\u2580\u2584\u2588]/.test(row)).length;
+  // A single bitfont line = 4 compressed rows. Wrapped multi-line must exceed 4.
+  assert.ok(glyphRowCount > 4, `expected >4 rows of glyphs, got ${glyphRowCount}`);
+});
+
+test("renderBigLyric does not write past a narrow sub-region into neighbor cells", () => {
+  // Renderer is wider than region; nothing should appear at/after x = region.x + region.width.
+  const cols = 80;
+  const r = new Renderer(cols, 10);
+  const regionW = 30;
+  renderBigLyric(
+    r,
+    { x: 0, y: 1, width: regionW, height: 6 },
+    { text: "HERE AIN'T A THING", bright: false },
+    buildTheme(0, true),
+  );
+  const lines = r.debugLines();
+  for (let y = 0; y < lines.length; y++) {
+    const rightSide = lines[y].slice(regionW);
+    assert.strictEqual(
+      rightSide.trim(),
+      "",
+      `row ${y}: glyphs leaked past region boundary: "${rightSide}"`,
+    );
   }
 });

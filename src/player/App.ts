@@ -12,7 +12,6 @@ import { startCpuFeeder } from "./feeders/cpuFeeder.js";
 import { fetchAlbumArt } from "./feeders/albumArtFeeder.js";
 import { fetchLyricsFor, updateActiveLyric } from "./feeders/lyricsFeeder.js";
 import * as spotifyDesktop from "../macos/spotifyDesktop.js";
-import { searchTracks } from "./search/spotifyWebApi.js";
 import { performance } from "node:perf_hooks";
 
 import { renderTitleBar } from "./widgets/titleBar.js";
@@ -32,11 +31,7 @@ export class App {
   private running = false;
   private stopCpu: (() => void) | null = null;
   private stopSpotify: (() => void) | null = null;
-  private searchDebounce: NodeJS.Timeout | null = null;
-  private searchAbort: AbortController | null = null;
   private transportDebounceAt = 0;
-  private progressBaselineAt = 0;
-  private progressBaselineMs = 0;
   private readonly opts: AppOptions;
 
   constructor(opts: AppOptions) {
@@ -61,17 +56,18 @@ export class App {
     await this.opts.audio.start();
     startAudioFeeder(this.opts.audio, this.state);
     this.stopSpotify = startSpotifyFeeder(this.state, (title, artist, album, artUrl) => {
-      this.progressBaselineAt = Date.now();
-      this.progressBaselineMs = this.state.progressMs;
+      // Reset per-track visuals. Baseline fields live on state now and
+      // are re-anchored on every Spotify poll inside the feeder itself.
       this.state.progressEnvelope.fill(0);
       this.state.activePadIndex = 0;
       const L = computeAppLayout(this.state.cols, this.state.rows);
-      void fetchAlbumArt(this.state, artUrl, L.screenR.width - 4, L.screenR.height - 3, this.opts.noColor);
+      void fetchAlbumArt(this.state, artUrl, L.screenR.width - 2, L.screenR.height - 2, this.opts.noColor);
       void fetchLyricsFor(this.state, title, artist, album);
     });
     this.stopCpu = startCpuFeeder(this.state);
 
-    startInput(() => (this.state.search.focused ? "text" : "hotkey"), (e) => this.handleInput(e));
+    // No search mode anymore — always in hotkey mode.
+    startInput(() => "hotkey", (e) => this.handleInput(e));
 
     const frameMs = 1000 / 60;
     let last = performance.now();
@@ -110,11 +106,11 @@ export class App {
       return;
     }
 
-    if (this.state.isPlaying && this.progressBaselineAt > 0) {
-      const elapsed = Date.now() - this.progressBaselineAt;
+    if (this.state.isPlaying && this.state.progressBaselineAt > 0) {
+      const elapsed = Date.now() - this.state.progressBaselineAt;
       this.state.progressMs = Math.min(
         this.state.durationMs,
-        this.progressBaselineMs + elapsed,
+        this.state.progressBaselineMs + elapsed,
       );
     }
     updateActiveLyric(this.state);
@@ -148,11 +144,7 @@ export class App {
       if (this.state.recentlyPlayed[e.slot]) this.state.activePadIndex = e.slot;
       return;
     }
-    if (this.state.search.focused) {
-      this.handleTextInput(e);
-    } else {
-      if (e.kind === "hotkey") this.handleHotkey(e.action);
-    }
+    if (e.kind === "hotkey") this.handleHotkey(e.action);
   }
 
   private handleHotkey(action: string): void {
@@ -199,70 +191,9 @@ export class App {
         this.state.artCellMode = order[(order.indexOf(this.state.artCellMode) + 1) % order.length];
         return;
       }
-      case "focus_search":
-        this.state.search.focused = true;
-        this.state.search.query = "";
-        this.state.search.results = [];
-        this.state.search.selectedIndex = 0;
-        return;
+      // `focus_search` intentionally no-op now — search has been
+      // removed from the UI. The HOTKEYS table still maps "/" to
+      // "focus_search" so we ignore it here rather than wiring it up.
     }
-  }
-
-  private handleTextInput(e: InputEvent): void {
-    if (e.kind === "text") {
-      this.state.search.query += e.char;
-      this.scheduleSearch();
-      return;
-    }
-    if (e.kind === "edit") {
-      if (e.op === "backspace") {
-        this.state.search.query = this.state.search.query.slice(0, -1);
-        this.scheduleSearch();
-      } else if (e.op === "enter") {
-        const sel = this.state.search.results[this.state.search.selectedIndex];
-        if (sel) void spotifyDesktop.playTrack(sel.uri).catch(() => {});
-        this.closeSearch();
-      } else if (e.op === "escape") {
-        this.closeSearch();
-      }
-      return;
-    }
-    if (e.kind === "nav") {
-      const n = this.state.search.results.length;
-      if (n === 0) return;
-      if (e.dir === "up") this.state.search.selectedIndex = (this.state.search.selectedIndex - 1 + n) % n;
-      if (e.dir === "down") this.state.search.selectedIndex = (this.state.search.selectedIndex + 1) % n;
-    }
-  }
-
-  private scheduleSearch(): void {
-    if (this.searchDebounce) clearTimeout(this.searchDebounce);
-    this.searchAbort?.abort();
-    this.searchDebounce = setTimeout(async () => {
-      const q = this.state.search.query;
-      if (!q.trim()) { this.state.search.results = []; this.state.search.loading = false; return; }
-      this.state.search.loading = true;
-      this.searchAbort = new AbortController();
-      try {
-        const res = await searchTracks(q, this.searchAbort.signal);
-        this.state.search.results = res;
-        this.state.search.selectedIndex = 0;
-        this.state.search.error = null;
-      } catch (err: any) {
-        this.state.search.error = err?.message ?? String(err);
-        this.state.search.results = [];
-      } finally {
-        this.state.search.loading = false;
-      }
-    }, 180);
-  }
-
-  private closeSearch(): void {
-    this.state.search.focused = false;
-    this.state.search.query = "";
-    this.state.search.results = [];
-    this.state.search.selectedIndex = 0;
-    this.searchAbort?.abort();
-    if (this.searchDebounce) clearTimeout(this.searchDebounce);
   }
 }

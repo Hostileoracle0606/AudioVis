@@ -1,6 +1,6 @@
 // src/album/converter.ts
 import Jimp from "jimp";
-import { ansilize, ansilizeMono } from "./ansilize.js";
+import { ansilize, ansilizeMono, ansilizeQuadrant } from "./ansilize.js";
 
 export interface AsciiArt {
   trackId: string;
@@ -44,6 +44,13 @@ function renderAt(img: Jimp, cols: number, rows: number, noColor: boolean): stri
   return noColor ? ansilizeMono(img, cols, rows) : ansilize(img, cols, rows);
 }
 
+function renderAtHiRes(img: Jimp, cols: number, rows: number, noColor: boolean): string[] {
+  if (cols <= 0 || rows <= 0) return [];
+  // Quadrant blocks double horizontal resolution. Fall back to mono ramp
+  // in --no-color mode since 2-colour-per-cell doesn't apply there.
+  return noColor ? ansilizeMono(img, cols, rows) : ansilizeQuadrant(img, cols, rows);
+}
+
 /**
  * Convert a raw image buffer to an AsciiArt object, using the ansilize
  * half-block truecolor renderer.  Produces two renderings:
@@ -55,23 +62,33 @@ export async function convertToAscii(
   trackId: string,
   vizCols: number,
   vizRows: number,
-  noColor: boolean
+  noColor: boolean,
+  targetCols?: number,
+  targetRows?: number,
 ): Promise<AsciiArt> {
   const img = await Jimp.read(buffer);
 
-  // Fullscreen album-art mode: ~48% viz width, aspect-corrected.
-  const fullCols0 = Math.max(1, Math.floor(vizCols * 0.48));
-  const fullRows = Math.max(1, Math.min(vizRows - 2, Math.floor(fullCols0 / 2.2)));
-  const fullCols = Math.max(1, Math.floor(fullRows * 2.2));
+  // When the caller supplies target dimensions, use them verbatim so the
+  // art fills the widget's interior exactly. Otherwise fall back to the
+  // legacy size heuristics.
+  let fullCols: number, fullRows: number;
+  if (targetCols && targetRows) {
+    fullCols = Math.max(1, targetCols);
+    fullRows = Math.max(1, targetRows);
+  } else {
+    const fullCols0 = Math.max(1, Math.floor(vizCols * 0.48));
+    fullRows = Math.max(1, Math.min(vizRows - 2, Math.floor(fullCols0 / 2.2)));
+    fullCols = Math.max(1, Math.floor(fullRows * 2.2));
+  }
 
-  // Player mode screen panel: roughly the screen sub-panel dimensions.
-  // Chassis is ~58% of viz width, screen is ~58% of chassis interior → ~32%.
-  // Height: roughly 8-10 rows (see renderChassis).
-  const playerCols = Math.max(4, Math.min(40, Math.floor(vizCols * 0.28)));
-  const playerRows = Math.max(3, Math.min(12, Math.floor(playerCols / 2.6)));
+  const playerCols = fullCols;
+  const playerRows = fullRows;
 
-  const lines = renderAt(img, fullCols, fullRows, noColor);
-  const playerLines = renderAt(img, playerCols, playerRows, noColor);
+  // Player mode: quadrant blocks (2× horizontal pixel density). Fullscreen
+  // album-art mode keeps the half-block renderer — simpler output that
+  // lets the user see the full image without chrome.
+  const lines = renderAtHiRes(img, fullCols, fullRows, noColor);
+  const playerLines = lines;
   const thumb = renderAt(img, 4, 2, noColor);
   const padFingerprint = computePadFingerprint(img);
 

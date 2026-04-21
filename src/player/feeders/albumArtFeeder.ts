@@ -21,7 +21,7 @@ export async function fetchAlbumArt(
   }
   try {
     const buf = await fetchImageBuffer(url);
-    const art = await convertToAscii(buf, cacheKey, cellCols * 2, cellRows * 2, noColor);
+    const art = await convertToAscii(buf, cacheKey, cellCols * 2, cellRows * 2, noColor, cellCols, cellRows);
     setCached(cacheKey, art);
     state.albumArt = art;
     state.padFingerprints[0] = art.padFingerprint;

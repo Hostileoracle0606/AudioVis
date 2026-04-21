@@ -47,26 +47,22 @@ const cpuFeeder_js_1 = require("./feeders/cpuFeeder.js");
 const albumArtFeeder_js_1 = require("./feeders/albumArtFeeder.js");
 const lyricsFeeder_js_1 = require("./feeders/lyricsFeeder.js");
 const spotifyDesktop = __importStar(require("../macos/spotifyDesktop.js"));
-const spotifyWebApi_js_1 = require("./search/spotifyWebApi.js");
 const node_perf_hooks_1 = require("node:perf_hooks");
 const titleBar_js_1 = require("./widgets/titleBar.js");
 const albumArt_js_1 = require("./widgets/albumArt.js");
 const nowPlaying_js_1 = require("./widgets/nowPlaying.js");
-const recentlyPlayed_js_1 = require("./widgets/recentlyPlayed.js");
+const queuePads_js_1 = require("./widgets/queuePads.js");
 const lyrics_js_1 = require("./widgets/lyrics.js");
 const spectrum_js_1 = require("./widgets/spectrum.js");
 const controls_js_1 = require("./widgets/controls.js");
+const accentArbiter_js_1 = require("./accentArbiter.js");
 class App {
     state;
     renderer;
     running = false;
     stopCpu = null;
     stopSpotify = null;
-    searchDebounce = null;
-    searchAbort = null;
     transportDebounceAt = 0;
-    progressBaselineAt = 0;
-    progressBaselineMs = 0;
     opts;
     constructor(opts) {
         this.opts = opts;
@@ -88,14 +84,17 @@ class App {
         await this.opts.audio.start();
         (0, audioFeeder_js_1.startAudioFeeder)(this.opts.audio, this.state);
         this.stopSpotify = (0, spotifyFeeder_js_1.startSpotifyFeeder)(this.state, (title, artist, album, artUrl) => {
-            this.progressBaselineAt = Date.now();
-            this.progressBaselineMs = this.state.progressMs;
+            // Reset per-track visuals. Baseline fields live on state now and
+            // are re-anchored on every Spotify poll inside the feeder itself.
+            this.state.progressEnvelope.fill(0);
+            this.state.activePadIndex = 0;
             const L = (0, layout_js_1.computeAppLayout)(this.state.cols, this.state.rows);
-            void (0, albumArtFeeder_js_1.fetchAlbumArt)(this.state, artUrl, L.artR.width - 4, L.artR.height - 3, this.opts.noColor);
+            void (0, albumArtFeeder_js_1.fetchAlbumArt)(this.state, artUrl, L.screenR.width - 2, L.screenR.height - 2, this.opts.noColor);
             void (0, lyricsFeeder_js_1.fetchLyricsFor)(this.state, title, artist, album);
         });
         this.stopCpu = (0, cpuFeeder_js_1.startCpuFeeder)(this.state);
-        (0, input_js_1.startInput)(() => (this.state.search.focused ? "text" : "hotkey"), (e) => this.handleInput(e));
+        // No search mode anymore — always in hotkey mode.
+        (0, input_js_1.startInput)(() => "hotkey", (e) => this.handleInput(e));
         const frameMs = 1000 / 60;
         let last = node_perf_hooks_1.performance.now();
         const tick = () => {
@@ -131,12 +130,13 @@ class App {
             this.renderer.flushDirty();
             return;
         }
-        if (this.state.isPlaying && this.progressBaselineAt > 0) {
-            const elapsed = Date.now() - this.progressBaselineAt;
-            this.state.progressMs = Math.min(this.state.durationMs, this.progressBaselineMs + elapsed);
+        if (this.state.isPlaying && this.state.progressBaselineAt > 0) {
+            const elapsed = Date.now() - this.state.progressBaselineAt;
+            this.state.progressMs = Math.min(this.state.durationMs, this.state.progressBaselineMs + elapsed);
         }
         (0, lyricsFeeder_js_1.updateActiveLyric)(this.state);
         const theme = (0, theme_js_1.buildTheme)(this.state.spectrumPaletteIndex, this.opts.noColor);
+        const accent = (0, accentArbiter_js_1.resolveAccentTargets)(this.state, Date.now());
         (0, borders_js_1.drawOuterFrame)(this.renderer);
         (0, borders_js_1.drawHSeparator)(this.renderer, L.sep1Y, { down: L.sep1Down, up: [] });
         (0, borders_js_1.drawHSeparator)(this.renderer, L.sep2Y, { down: L.sep2Down, up: L.sep2Up });
@@ -144,12 +144,12 @@ class App {
         (0, borders_js_1.drawVDivider)(this.renderer, L.sep1Down[0], L.topRow.y, L.topRow.y + L.topRow.height - 1);
         (0, borders_js_1.drawVDivider)(this.renderer, L.sep1Down[1], L.topRow.y, L.topRow.y + L.topRow.height - 1);
         (0, borders_js_1.drawVDivider)(this.renderer, L.sep2Down[0], L.middleRow.y, L.middleRow.y + L.middleRow.height - 1);
-        (0, titleBar_js_1.renderTitleBar)(this.renderer, L, this.state, theme);
-        (0, albumArt_js_1.renderAlbumArt)(this.renderer, L.artR, this.state, theme);
+        (0, titleBar_js_1.renderTitleBar)(this.renderer, L, this.state, theme, accent);
+        (0, albumArt_js_1.renderAlbumArt)(this.renderer, L.screenR, this.state, theme);
         (0, nowPlaying_js_1.renderNowPlaying)(this.renderer, L.nowR, this.state, theme);
-        (0, recentlyPlayed_js_1.renderRecentlyPlayed)(this.renderer, L.recentR, this.state, theme);
-        (0, lyrics_js_1.renderLyrics)(this.renderer, L.lyricsR, this.state, theme);
-        (0, spectrum_js_1.renderSpectrum)(this.renderer, L.spectrumR, this.state, theme);
+        (0, queuePads_js_1.renderQueuePads)(this.renderer, L.padsR, this.state, theme);
+        (0, lyrics_js_1.renderLyrics)(this.renderer, L.lyricsR, this.state, theme, accent);
+        (0, spectrum_js_1.renderSpectrum)(this.renderer, L.spectrumR, this.state, theme, accent);
         (0, controls_js_1.renderControls)(this.renderer, L, this.state, theme);
         this.renderer.flushDirty();
     }
@@ -158,13 +158,13 @@ class App {
             void this.stop().then(() => process.exit(0));
             return;
         }
-        if (this.state.search.focused) {
-            this.handleTextInput(e);
+        if (e.kind === "play_pad") {
+            if (this.state.recentlyPlayed[e.slot])
+                this.state.activePadIndex = e.slot;
+            return;
         }
-        else {
-            if (e.kind === "hotkey")
-                this.handleHotkey(e.action);
-        }
+        if (e.kind === "hotkey")
+            this.handleHotkey(e.action);
     }
     handleHotkey(action) {
         const now = Date.now();
@@ -218,82 +218,10 @@ class App {
                 this.state.artCellMode = order[(order.indexOf(this.state.artCellMode) + 1) % order.length];
                 return;
             }
-            case "focus_search":
-                this.state.search.focused = true;
-                this.state.search.query = "";
-                this.state.search.results = [];
-                this.state.search.selectedIndex = 0;
-                return;
+            // `focus_search` intentionally no-op now — search has been
+            // removed from the UI. The HOTKEYS table still maps "/" to
+            // "focus_search" so we ignore it here rather than wiring it up.
         }
-    }
-    handleTextInput(e) {
-        if (e.kind === "text") {
-            this.state.search.query += e.char;
-            this.scheduleSearch();
-            return;
-        }
-        if (e.kind === "edit") {
-            if (e.op === "backspace") {
-                this.state.search.query = this.state.search.query.slice(0, -1);
-                this.scheduleSearch();
-            }
-            else if (e.op === "enter") {
-                const sel = this.state.search.results[this.state.search.selectedIndex];
-                if (sel)
-                    void spotifyDesktop.playTrack(sel.uri).catch(() => { });
-                this.closeSearch();
-            }
-            else if (e.op === "escape") {
-                this.closeSearch();
-            }
-            return;
-        }
-        if (e.kind === "nav") {
-            const n = this.state.search.results.length;
-            if (n === 0)
-                return;
-            if (e.dir === "up")
-                this.state.search.selectedIndex = (this.state.search.selectedIndex - 1 + n) % n;
-            if (e.dir === "down")
-                this.state.search.selectedIndex = (this.state.search.selectedIndex + 1) % n;
-        }
-    }
-    scheduleSearch() {
-        if (this.searchDebounce)
-            clearTimeout(this.searchDebounce);
-        this.searchAbort?.abort();
-        this.searchDebounce = setTimeout(async () => {
-            const q = this.state.search.query;
-            if (!q.trim()) {
-                this.state.search.results = [];
-                this.state.search.loading = false;
-                return;
-            }
-            this.state.search.loading = true;
-            this.searchAbort = new AbortController();
-            try {
-                const res = await (0, spotifyWebApi_js_1.searchTracks)(q, this.searchAbort.signal);
-                this.state.search.results = res;
-                this.state.search.selectedIndex = 0;
-                this.state.search.error = null;
-            }
-            catch (err) {
-                this.state.search.error = err?.message ?? String(err);
-                this.state.search.results = [];
-            }
-            finally {
-                this.state.search.loading = false;
-            }
-        }, 180);
-    }
-    closeSearch() {
-        this.state.search.focused = false;
-        this.state.search.query = "";
-        this.state.search.results = [];
-        this.state.search.selectedIndex = 0;
-        this.searchAbort?.abort();
-        if (this.searchDebounce)
-            clearTimeout(this.searchDebounce);
     }
 }
 exports.App = App;

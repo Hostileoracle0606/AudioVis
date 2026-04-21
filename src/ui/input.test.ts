@@ -13,9 +13,9 @@ test("hotkey mode: 'p' emits toggle_play", () => {
   assert.deepStrictEqual(ev, [{ kind: "hotkey", action: "toggle_play" }]);
 });
 
-test("hotkey mode: '/' emits focus_search", () => {
+test("hotkey mode: '/' is now unmapped (search removed from the UI)", () => {
   const ev = collect("hotkey", [{ name: "/" }]);
-  assert.deepStrictEqual(ev, [{ kind: "hotkey", action: "focus_search" }]);
+  assert.deepStrictEqual(ev, []);
 });
 
 test("text mode: 'p' emits text event (not a hotkey)", () => {

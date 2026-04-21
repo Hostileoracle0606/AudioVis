@@ -7,8 +7,7 @@ export type HotkeyAction =
   | "prev"
   | "mute"
   | "cycle_palette"
-  | "toggle_art"
-  | "focus_search";
+  | "toggle_art";
 
 export type InputEvent =
   | { kind: "hotkey"; action: HotkeyAction }
@@ -30,7 +29,6 @@ const HOTKEYS: Record<string, HotkeyAction> = {
   "m":  "mute",
   "v":  "cycle_palette",
   "a":  "toggle_art",
-  "/":  "focus_search",
 };
 
 export function dispatchKey(

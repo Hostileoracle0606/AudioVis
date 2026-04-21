@@ -3,15 +3,6 @@ import type { AsciiArt } from "../album/converter.js";
 
 export interface LrcLine { timeMs: number; text: string; }
 
-export interface SearchResult {
-  id: string;
-  uri: string;
-  name: string;
-  artist: string;
-  album: string;
-  durationMs: number;
-}
-
 export type ArtCellMode = "art" | "vu" | "blank";
 
 export interface AppState {
@@ -39,19 +30,18 @@ export interface AppState {
 
   cpuPct: number;
 
-  search: {
-    focused: boolean;
-    query: string;
-    results: SearchResult[];
-    selectedIndex: number;
-    loading: boolean;
-    error: string | null;
-  };
-
   spectrumPaletteIndex: number;
   artCellMode: ArtCellMode;
   isMuted: boolean;
   savedVolume: number;
+
+  // Extrapolation baseline for progressMs — re-anchored on every
+  // Spotify poll so pauses/seeks don't let the render-loop clock drift
+  // away from reality. `progressBaselineAt` is a wall-clock timestamp
+  // (ms since epoch); `progressBaselineMs` is the track-position that
+  // was true at that wall-clock time.
+  progressBaselineAt: number;
+  progressBaselineMs: number;
 
   lastTransientAt: number;
   lastClipAt: number;
@@ -77,10 +67,10 @@ export function createInitialState(cols: number, rows: number): AppState {
     lyrics: [], activeLyricIndex: -1,
     albumArt: null,
     cpuPct: 0,
-    search: { focused: false, query: "", results: [], selectedIndex: 0, loading: false, error: null },
     spectrumPaletteIndex: 0,
     artCellMode: "art",
     isMuted: false, savedVolume: 50,
+    progressBaselineAt: 0, progressBaselineMs: 0,
     lastTransientAt: 0, lastClipAt: 0, lastPeakAt: 0,
     progressEnvelope: new Float32Array(128),
     ledChaserIndex: 0,

@@ -4,9 +4,27 @@ import type { AppState } from "../state.js";
 import type { Theme } from "../theme.js";
 import type { AccentTarget } from "../accentArbiter.js";
 import { renderBigLyric } from "./bigLyric.js";
+import { LYRIC_LEAD_MS } from "../feeders/lyricsFeeder.js";
 
-function truncate(s: string, max: number): string {
-  return s.length <= max ? s : s.slice(0, Math.max(0, max - 1)) + "\u2026";
+const FALLBACK_LINE_MS = 4000; // used for the final lyric (no successor timestamp)
+
+/**
+ * Return the portion of the line that has been sung so far, assuming the
+ * characters are uttered linearly across the line's time window. Used for
+ * karaoke-style progressive reveal.
+ */
+export function sungSoFar(
+  text: string,
+  lineStartMs: number,
+  nextLineStartMs: number | undefined,
+  nowMs: number,
+): string {
+  if (text.length === 0) return "";
+  const lineEndMs = nextLineStartMs ?? lineStartMs + FALLBACK_LINE_MS;
+  const duration = Math.max(1, lineEndMs - lineStartMs);
+  const progress = Math.max(0, Math.min(1, (nowMs - lineStartMs) / duration));
+  const chars = Math.max(0, Math.min(text.length, Math.round(progress * text.length)));
+  return text.slice(0, chars);
 }
 
 export function renderLyrics(
@@ -28,27 +46,27 @@ export function renderLyrics(
   }
 
   const idx = state.activeLyricIndex;
-  const prev = idx > 0 ? state.lyrics[idx - 1]?.text : null;
-  const active = idx >= 0 ? state.lyrics[idx]?.text : null;
-  const next = idx + 1 < state.lyrics.length ? state.lyrics[idx + 1]?.text : null;
+  const activeLine = idx >= 0 ? state.lyrics[idx] : null;
 
-  if (prev) {
-    r.write(xi, region.y + 1, `${theme.dim}\u00B7 ${truncate(prev, pad - 2)}${theme.reset}`);
+  if (activeLine && activeLine.text.length > 0) {
+    // Same lead offset used to pick the active line — so the karaoke
+    // char-reveal progresses in phase with the line switch instead of
+    // lagging behind by ~250 ms.
+    const effectiveNow = state.progressMs + LYRIC_LEAD_MS;
+    const revealed = sungSoFar(activeLine.text, activeLine.timeMs, state.lyrics[idx + 1]?.timeMs, effectiveNow);
+    if (revealed.length > 0) {
+      const bright = accent.has("sync") || accent.has("bass-bin");
+      const bigY = region.y + 1;
+      const bigH = Math.max(0, region.height - 2);
+      renderBigLyric(
+        r,
+        { x: region.x, y: bigY, width: region.width, height: bigH },
+        { text: revealed, bright },
+        theme,
+      );
+    }
   }
 
-  if (active) {
-    const bright = accent.has("sync") || accent.has("bass-bin");
-    renderBigLyric(
-      r,
-      { x: region.x, y: region.y + 1, width: region.width, height: Math.min(region.height - 2, 5) },
-      { text: active, bright },
-      theme,
-    );
-  }
-
-  if (next && region.height >= 8) {
-    r.write(xi, region.y + region.height - 2, `${theme.dim}\u00B7 ${truncate(next, pad - 2)}${theme.reset}`);
-  }
   const dotRow = region.y + region.height - 1;
   const dots = "\u00B7 ".repeat(Math.floor(pad / 2));
   r.write(xi, dotRow, `${theme.dim}${dots}${theme.reset}`);

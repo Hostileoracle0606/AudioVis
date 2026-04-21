@@ -1,6 +1,6 @@
 import type { Region } from "../ui/tui.js";
-export declare const MIN_COLS = 96;
-export declare const MIN_ROWS = 24;
+export declare const MIN_COLS = 108;
+export declare const MIN_ROWS = 28;
 export interface AppLayout {
     outer: Region;
     inner: Region;
@@ -11,9 +11,9 @@ export interface AppLayout {
     sep1Y: number;
     sep1Down: number[];
     topRow: Region;
-    artR: Region;
+    screenR: Region;
     nowR: Region;
-    recentR: Region;
+    padsR: Region;
     sep2Y: number;
     sep2Up: number[];
     sep2Down: number[];

@@ -30,7 +30,13 @@ export function startSpotifyFeeder(
       state.isPlaying = s.isPlaying;
       state.progressMs = s.progressMs;
       state.durationMs = s.durationMs;
-      state.lastSpotifyPollAt = Date.now();
+      const pollAt = Date.now();
+      state.lastSpotifyPollAt = pollAt;
+      // Re-anchor the extrapolation baseline on every poll. Without this,
+      // the render-loop clock would drift past reality after any pause/
+      // seek because `baselineAt` only used to reset on track change.
+      state.progressBaselineAt = pollAt;
+      state.progressBaselineMs = s.progressMs;
 
       const key = `${s.trackName}\u0000${s.artistName}`;
       if (key !== lastKey) {

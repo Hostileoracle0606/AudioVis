@@ -68,7 +68,7 @@ test("full frame renders without throwing, no cross junctions", () => {
 
   assert.ok(!joined.includes("\u253C"), "unexpected \u253C cross in frame");
 
-  for (const label of ["TUI\u00B7AMP", "screen \u00B7", "now \u00B7 track", "pads \u00B7 queue", "lyrics", "spectrum"]) {
+  for (const label of ["TUI\u00B7AMP", "screen \u00B7", "now \u00B7 track", "pads \u00B7 step", "lyrics", "spectrum"]) {
     assert.ok(joined.includes(label), `missing label ${JSON.stringify(label)}`);
   }
 

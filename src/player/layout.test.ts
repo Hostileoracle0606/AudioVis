@@ -7,11 +7,12 @@ test("MIN_COLS=108 and MIN_ROWS=28", () => {
   assert.strictEqual(MIN_ROWS, 28);
 });
 
-test("top row is 15 rows tall and columns sum to inner width", () => {
+test("top row: 15 rows tall; screen 28 / pads 36 fixed; now fills the rest", () => {
   const L = computeAppLayout(120, 36);
   assert.strictEqual(L.topRow.height, 15);
-  assert.strictEqual(L.nowR.width, 34);
-  assert.strictEqual(L.padsR.width, 34);
+  assert.strictEqual(L.screenR.width, 28);
+  assert.strictEqual(L.padsR.width, 36);
+  assert.strictEqual(L.nowR.width, L.inner.width - 28 - 36);
   assert.strictEqual(L.screenR.width + L.nowR.width + L.padsR.width, L.inner.width);
 });
 

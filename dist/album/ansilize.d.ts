@@ -23,5 +23,14 @@ import Jimp from "jimp";
  * @param rows    Target height in terminal cells (each cell = 2 image pixels).
  */
 export declare function ansilize(img: Jimp, cols: number, rows: number): string[];
+/**
+ * Truecolor quadrant-block renderer. Each terminal cell encodes 2×2
+ * image sub-pixels (vs. 1×2 for `ansilize`), doubling horizontal
+ * resolution. Since a cell has only one fg + one bg colour, the 4
+ * sub-pixels are split into a fg cluster (brighter than cell mean)
+ * and a bg cluster (darker), then averaged to produce the two SGR
+ * colours. The quadrant glyph picks which positions belong to fg.
+ */
+export declare function ansilizeQuadrant(img: Jimp, cols: number, rows: number): string[];
 export declare function ansilizeMono(img: Jimp, cols: number, rows: number): string[];
 //# sourceMappingURL=ansilize.d.ts.map

@@ -15,7 +15,6 @@ const HOTKEYS = {
     "m": "mute",
     "v": "cycle_palette",
     "a": "toggle_art",
-    "/": "focus_search",
 };
 function dispatchKey(getMode, emit, key) {
     if (key.ctrl && key.name === "c") {
@@ -25,6 +24,10 @@ function dispatchKey(getMode, emit, key) {
     const mode = getMode();
     if (mode === "hotkey") {
         const name = key.name ?? key.sequence ?? "";
+        if (name.length === 1 && name >= "1" && name <= "8") {
+            emit({ kind: "play_pad", slot: parseInt(name, 10) - 1 });
+            return;
+        }
         const act = HOTKEYS[name];
         if (act)
             emit({ kind: "hotkey", action: act });

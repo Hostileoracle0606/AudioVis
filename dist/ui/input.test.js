@@ -16,9 +16,9 @@ function collect(mode, keys) {
     const ev = collect("hotkey", [{ name: "p" }]);
     node_assert_1.default.deepStrictEqual(ev, [{ kind: "hotkey", action: "toggle_play" }]);
 });
-(0, node_test_1.default)("hotkey mode: '/' emits focus_search", () => {
+(0, node_test_1.default)("hotkey mode: '/' is now unmapped (search removed from the UI)", () => {
     const ev = collect("hotkey", [{ name: "/" }]);
-    node_assert_1.default.deepStrictEqual(ev, [{ kind: "hotkey", action: "focus_search" }]);
+    node_assert_1.default.deepStrictEqual(ev, []);
 });
 (0, node_test_1.default)("text mode: 'p' emits text event (not a hotkey)", () => {
     const ev = collect("text", [{ name: "p", sequence: "p" }]);

@@ -1,39 +1,51 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.sungSoFar = sungSoFar;
 exports.renderLyrics = renderLyrics;
-const bitfont_js_1 = require("../../ui/bitfont.js");
-const LABEL_PEAK = "[ TRANSIENT PEAK -> FONT-SCALE MAX ]";
-const BIG_THRESHOLD = 0.6;
-function clip(s, w) {
-    return s.length <= w ? s : s.slice(0, Math.max(0, w - 1)) + "\u2026";
+const bigLyric_js_1 = require("./bigLyric.js");
+const lyricsFeeder_js_1 = require("../feeders/lyricsFeeder.js");
+const FALLBACK_LINE_MS = 4000; // used for the final lyric (no successor timestamp)
+/**
+ * Return the portion of the line that has been sung so far, assuming the
+ * characters are uttered linearly across the line's time window. Used for
+ * karaoke-style progressive reveal.
+ */
+function sungSoFar(text, lineStartMs, nextLineStartMs, nowMs) {
+    if (text.length === 0)
+        return "";
+    const lineEndMs = nextLineStartMs ?? lineStartMs + FALLBACK_LINE_MS;
+    const duration = Math.max(1, lineEndMs - lineStartMs);
+    const progress = Math.max(0, Math.min(1, (nowMs - lineStartMs) / duration));
+    const chars = Math.max(0, Math.min(text.length, Math.round(progress * text.length)));
+    return text.slice(0, chars);
 }
-function renderLyrics(r, region, state, theme) {
-    if (region.width < 20 || region.height < 6)
+function renderLyrics(r, region, state, theme, accent) {
+    if (region.width < 20 || region.height < 4)
         return;
     const xi = region.x + 2;
-    const big = state.transientEnergy >= BIG_THRESHOLD;
-    const rms = state.rms.toFixed(2);
-    const labelPlain = `[ KINETIC LYRICS // SYNC: RMS ${rms} ]`;
-    r.write(xi, region.y, `${theme.dim}${big ? LABEL_PEAK : labelPlain}${theme.reset}`);
-    const active = state.lyrics[state.activeLyricIndex];
-    const prev = state.lyrics[state.activeLyricIndex - 1];
-    const next = state.lyrics[state.activeLyricIndex + 1];
-    const bodyY = region.y + 2;
-    const bodyW = region.width - 4;
-    if (prev)
-        r.write(xi, bodyY, `${theme.dim}${clip(prev.text, bodyW)}${theme.reset}`);
-    if (next)
-        r.write(xi, bodyY + Math.min(region.height - 4, 1 + (big ? bitfont_js_1.GLYPH_H : 1)), `${theme.dim}${clip(next.text, bodyW)}${theme.reset}`);
-    if (!active)
+    const pad = region.width - 4;
+    r.write(xi, region.y, `${theme.dim}[ lyrics \u00B7 sync rms ${state.rms.toFixed(2)} \u00B7 lrclib ]${theme.reset}`);
+    if (state.lyrics.length === 0) {
+        r.write(xi, region.y + 2, `${theme.dim}\u2014 no lyrics \u2014${theme.reset}`);
         return;
-    if (big) {
-        const rows = (0, bitfont_js_1.renderBigLine)(active.text);
-        for (let i = 0; i < Math.min(bitfont_js_1.GLYPH_H, region.height - 5); i++) {
-            r.write(xi, bodyY + 1 + i, `${theme.fg}${clip(rows[i], bodyW)}${theme.reset}`);
+    }
+    const idx = state.activeLyricIndex;
+    const activeLine = idx >= 0 ? state.lyrics[idx] : null;
+    if (activeLine && activeLine.text.length > 0) {
+        // Same lead offset used to pick the active line — so the karaoke
+        // char-reveal progresses in phase with the line switch instead of
+        // lagging behind by ~250 ms.
+        const effectiveNow = state.progressMs + lyricsFeeder_js_1.LYRIC_LEAD_MS;
+        const revealed = sungSoFar(activeLine.text, activeLine.timeMs, state.lyrics[idx + 1]?.timeMs, effectiveNow);
+        if (revealed.length > 0) {
+            const bright = accent.has("sync") || accent.has("bass-bin");
+            const bigY = region.y + 1;
+            const bigH = Math.max(0, region.height - 2);
+            (0, bigLyric_js_1.renderBigLyric)(r, { x: region.x, y: bigY, width: region.width, height: bigH }, { text: revealed, bright }, theme);
         }
     }
-    else {
-        r.write(xi, bodyY + 1, `${theme.fg}${clip(active.text, bodyW)}${theme.reset}`);
-    }
+    const dotRow = region.y + region.height - 1;
+    const dots = "\u00B7 ".repeat(Math.floor(pad / 2));
+    r.write(xi, dotRow, `${theme.dim}${dots}${theme.reset}`);
 }
 //# sourceMappingURL=lyrics.js.map

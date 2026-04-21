@@ -1,7 +1,10 @@
-export type HotkeyAction = "quit" | "toggle_play" | "next" | "prev" | "mute" | "cycle_palette" | "toggle_art" | "focus_search";
+export type HotkeyAction = "quit" | "toggle_play" | "next" | "prev" | "mute" | "cycle_palette" | "toggle_art";
 export type InputEvent = {
     kind: "hotkey";
     action: HotkeyAction;
+} | {
+    kind: "play_pad";
+    slot: number;
 } | {
     kind: "text";
     char: string;

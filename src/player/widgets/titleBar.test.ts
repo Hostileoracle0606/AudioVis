@@ -36,10 +36,14 @@ test("sync LED uses accent when sync in accent set", () => {
   assert.ok(raw.includes(theme.accent));
 });
 
-test("search hint shown when not focused", () => {
+test("titleBar shows the hotkey legend in the former search slot", () => {
   const r = new Renderer(120, 30);
   const s = createInitialState(120, 30);
   const L = computeAppLayout(120, 30);
   renderTitleBar(r, L, s, buildTheme(0, true), new Set());
-  assert.match(r.debugLines().join("\n"), /\/ to search/);
+  const all = r.debugLines().join("\n");
+  assert.match(all, /\[p\]lay/);
+  assert.match(all, /\[q\]uit/);
+  // Search hint must NOT appear — search has been removed.
+  assert.ok(!/to search/.test(all), "search hint should be gone");
 });

@@ -1,0 +1,1 @@
+{"version":3,"file":"accentArbiter.d.ts","sourceRoot":"","sources":["../../src/player/accentArbiter.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,QAAQ,EAAE,MAAM,YAAY,CAAC;AAE3C,MAAM,MAAM,YAAY,GAAG,OAAO,GAAG,MAAM,GAAG,UAAU,GAAG,MAAM,GAAG,MAAM,GAAG,KAAK,CAAC;AAQnF;;;;;GAKG;AACH,wBAAgB,oBAAoB,CAAC,KAAK,EAAE,QAAQ,EAAE,KAAK,EAAE,MAAM,GAAG,GAAG,CAAC,YAAY,CAAC,CAWtF"}
