@@ -5,20 +5,38 @@ import { renderSpectrum } from "./spectrum.js";
 import { createInitialState } from "../state.js";
 import { buildTheme } from "../theme.js";
 
-test("spectrum renders label", () => {
-  const r = new Renderer(60, 20);
-  const s = createInitialState(60, 20);
-  renderSpectrum(r, { x: 0, y: 0, width: 60, height: 20 }, s, buildTheme(0, true));
-  assert.ok(r.debugLines().join("\n").includes("SPECTRUM ANALYZER"));
+test("spectrum renders header with palette name and peak", () => {
+  const r = new Renderer(80, 12);
+  const s = createInitialState(80, 12);
+  renderSpectrum(r, { x: 0, y: 0, width: 80, height: 12 }, s, buildTheme(0, true), new Set());
+  const all = r.debugLines().join("\n");
+  assert.match(all, /spectrum/i);
+  assert.match(all, /amber|warm|AMBER/i);
 });
 
-test("spectrum draws full bar for magnitude 1.0 and empty for 0.0", () => {
-  const r = new Renderer(60, 20);
-  const s = createInitialState(60, 20);
-  s.spectrum = new Float32Array(16);
-  s.spectrum[0] = 1.0;
-  renderSpectrum(r, { x: 0, y: 0, width: 60, height: 20 }, s, buildTheme(0, true));
-  const lines = r.debugLines();
-  const bottom = lines[17];
-  assert.ok(bottom.includes("\u2588"), "expected at least one full-block glyph on filled bar row");
+test("spectrum shows Hz-label row", () => {
+  const r = new Renderer(80, 12);
+  const s = createInitialState(80, 12);
+  renderSpectrum(r, { x: 0, y: 0, width: 80, height: 12 }, s, buildTheme(0, true), new Set());
+  const all = r.debugLines().join("\n");
+  assert.ok(all.includes("62") && all.includes("1k") && all.includes("8k"));
+});
+
+test("spectrum shows peak-hold ● row", () => {
+  const r = new Renderer(80, 12);
+  const s = createInitialState(80, 12);
+  for (let i = 0; i < 16; i++) s.spectrum[i] = 0.5;
+  renderSpectrum(r, { x: 0, y: 0, width: 80, height: 12 }, s, buildTheme(0, true), new Set());
+  const all = r.debugLines().join("\n");
+  assert.ok(all.includes("\u25CF"), "peak-hold ● row missing");
+});
+
+test("bass-bin accent applied when target set includes bass-bin", () => {
+  const r = new Renderer(80, 12);
+  const s = createInitialState(80, 12);
+  s.spectrum[0] = 0.9;
+  const theme = buildTheme(0, false);
+  renderSpectrum(r, { x: 0, y: 0, width: 80, height: 12 }, s, theme, new Set(["bass-bin"]));
+  const raw = (r as any).cells.join("");
+  assert.ok(raw.includes(theme.accent), "accent not applied to bass bin");
 });

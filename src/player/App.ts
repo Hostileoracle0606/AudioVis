@@ -131,7 +131,7 @@ export class App {
     renderNowPlaying(this.renderer, L.nowR, this.state, theme);
     renderRecentlyPlayed(this.renderer, L.padsR, this.state, theme);
     renderLyrics(this.renderer, L.lyricsR, this.state, theme);
-    renderSpectrum(this.renderer, L.spectrumR, this.state, theme);
+    renderSpectrum(this.renderer, L.spectrumR, this.state, theme, new Set());
     renderControls(this.renderer, L, this.state, theme);
 
     this.renderer.flushDirty();
