@@ -38,10 +38,11 @@ function createLinuxAudioSource(opts) {
     let proc = null;
     const listeners = [];
     let buffer = Buffer.alloc(0);
-    const bytesPerFrame = frameSize * 4; // f32le = 4 bytes
+    const NUM_CHANNELS = 2;
+    const bytesPerFrame = frameSize * NUM_CHANNELS * 4; // interleaved stereo f32le
     return {
         getInfo() {
-            return { platform: "linux", device, sampleRate, frameSize };
+            return { platform: "linux", device, sampleRate, frameSize, numChannels: NUM_CHANNELS };
         },
         onFrame(cb) {
             listeners.push(cb);
@@ -54,7 +55,7 @@ function createLinuxAudioSource(opts) {
                     "--raw",
                     "--format=float32le",
                     `--rate=${sampleRate}`,
-                    "--channels=1",
+                    `--channels=${NUM_CHANNELS}`,
                     "--latency-msec=50",
                 ];
                 proc = (0, child_process_1.spawn)("parecord", args, { stdio: ["ignore", "pipe", "pipe"] });
@@ -64,7 +65,7 @@ function createLinuxAudioSource(opts) {
                         "--target", device,
                         "--format", "f32",
                         `--rate=${sampleRate}`,
-                        "--channels=1",
+                        `--channels=${NUM_CHANNELS}`,
                         "-",
                     ], { stdio: ["ignore", "pipe", "pipe"] });
                     proc.on("error", (err2) => {
@@ -85,7 +86,7 @@ function createLinuxAudioSource(opts) {
                         while (buffer.length >= bytesPerFrame) {
                             const frameBuffer = buffer.slice(0, bytesPerFrame);
                             buffer = buffer.slice(bytesPerFrame);
-                            const fa = new Float32Array(frameBuffer.buffer, frameBuffer.byteOffset, frameSize);
+                            const fa = new Float32Array(frameBuffer.buffer, frameBuffer.byteOffset, frameSize * NUM_CHANNELS);
                             for (const cb of listeners)
                                 cb(fa);
                         }

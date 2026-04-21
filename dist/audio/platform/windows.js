@@ -29,7 +29,8 @@ function createWindowsAudioSource(opts) {
     let proc = null;
     const listeners = [];
     let buffer = Buffer.alloc(0);
-    const bytesPerFrame = frameSize * 4;
+    const NUM_CHANNELS = 2;
+    const bytesPerFrame = frameSize * NUM_CHANNELS * 4; // interleaved stereo f32le
     function buildArgs() {
         if (deviceName === "default") {
             // WASAPI loopback — captures whatever is playing on the default output
@@ -38,7 +39,7 @@ function createWindowsAudioSource(opts) {
                 "-f", "wasapi",
                 "-loopback", "1",
                 "-i", "default",
-                "-ac", "1",
+                "-ac", String(NUM_CHANNELS),
                 "-ar", String(sampleRate),
                 "-f", "f32le",
                 "pipe:1",
@@ -49,7 +50,7 @@ function createWindowsAudioSource(opts) {
             "-hide_banner", "-loglevel", "error",
             "-f", "dshow",
             "-i", `audio=${deviceName}`,
-            "-ac", "1",
+            "-ac", String(NUM_CHANNELS),
             "-ar", String(sampleRate),
             "-f", "f32le",
             "pipe:1",
@@ -57,7 +58,7 @@ function createWindowsAudioSource(opts) {
     }
     return {
         getInfo() {
-            return { platform: "windows", device: deviceName, sampleRate, frameSize };
+            return { platform: "windows", device: deviceName, sampleRate, frameSize, numChannels: NUM_CHANNELS };
         },
         onFrame(cb) {
             listeners.push(cb);
@@ -82,7 +83,7 @@ function createWindowsAudioSource(opts) {
                     while (buffer.length >= bytesPerFrame) {
                         const frameBuffer = buffer.slice(0, bytesPerFrame);
                         buffer = buffer.slice(bytesPerFrame);
-                        const fa = new Float32Array(frameBuffer.buffer, frameBuffer.byteOffset, frameSize);
+                        const fa = new Float32Array(frameBuffer.buffer, frameBuffer.byteOffset, frameSize * NUM_CHANNELS);
                         for (const cb of listeners)
                             cb(fa);
                     }

@@ -1,12 +1,8 @@
 import type { Command } from "commander";
 interface VisOpts {
-    mode: string;
-    bars: string;
-    fps: string;
     audioDevice?: string;
     sampleRate: string;
     fftSize: string;
-    asciiSafe: boolean;
     noColor: boolean;
     silent: boolean;
 }

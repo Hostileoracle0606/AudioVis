@@ -32,7 +32,8 @@ function createMacosAudioSource(opts) {
     let proc = null;
     const listeners = [];
     let buffer = Buffer.alloc(0);
-    const bytesPerFrame = frameSize * 4;
+    const NUM_CHANNELS = 2;
+    const bytesPerFrame = frameSize * NUM_CHANNELS * 4; // interleaved stereo f32le
     if (!deviceName) {
         // Fail immediately with a helpful message rather than silently capturing
         // the microphone or nothing.
@@ -47,7 +48,7 @@ function createMacosAudioSource(opts) {
             '  ffmpeg -f avfoundation -list_devices true -i ""');
         // Return a source that immediately throws on start().
         return {
-            getInfo: () => ({ platform: "macos", device: "none", sampleRate, frameSize }),
+            getInfo: () => ({ platform: "macos", device: "none", sampleRate, frameSize, numChannels: NUM_CHANNELS }),
             onFrame: () => { },
             start: async () => { throw err; },
             stop: async () => { },
@@ -61,7 +62,7 @@ function createMacosAudioSource(opts) {
             "-hide_banner", "-loglevel", "error",
             "-f", "avfoundation",
             "-i", avfDevice,
-            "-ac", "1",
+            "-ac", String(NUM_CHANNELS),
             "-ar", String(sampleRate),
             "-f", "f32le",
             "pipe:1",
@@ -69,7 +70,7 @@ function createMacosAudioSource(opts) {
     }
     return {
         getInfo() {
-            return { platform: "macos", device: deviceName, sampleRate, frameSize };
+            return { platform: "macos", device: deviceName, sampleRate, frameSize, numChannels: NUM_CHANNELS };
         },
         onFrame(cb) {
             listeners.push(cb);
@@ -93,7 +94,7 @@ function createMacosAudioSource(opts) {
                     while (buffer.length >= bytesPerFrame) {
                         const frameBuffer = buffer.slice(0, bytesPerFrame);
                         buffer = buffer.slice(bytesPerFrame);
-                        const fa = new Float32Array(frameBuffer.buffer, frameBuffer.byteOffset, frameSize);
+                        const fa = new Float32Array(frameBuffer.buffer, frameBuffer.byteOffset, frameSize * NUM_CHANNELS);
                         for (const cb of listeners)
                             cb(fa);
                     }

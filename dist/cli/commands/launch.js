@@ -7,15 +7,13 @@ exports.registerLaunch = registerLaunch;
 const picocolors_1 = __importDefault(require("picocolors"));
 const store_js_1 = require("../../config/store.js");
 const setup_js_1 = require("../../macos/setup.js");
-const auth_js_1 = require("../../spotify/auth.js");
-const tokenStore_js_1 = require("../../spotify/tokenStore.js");
 const errors_js_1 = require("../../utils/errors.js");
 const visualizer_js_1 = require("./visualizer.js");
 function registerLaunch(program) {
     program
         .command("launch")
         .description("Prepare the app, then launch the visualizer")
-        .option("--mode <wavefield|scroll|spectrum>", "Visualization mode", "wavefield")
+        .option("--mode <player|wavefield|scroll|spectrum|album-art>", "Visualization mode", "wavefield")
         .option("--bars <n>", "Number of spectrum bars", "32")
         .option("--fps <n>", "Target frames per second", "30")
         .option("--sample-rate <n>", "Audio sample rate (Hz)", "44100")
@@ -29,11 +27,7 @@ function registerLaunch(program) {
             if (process.platform === "darwin") {
                 const result = await (0, setup_js_1.ensureMacosReady)();
                 audioDevice = result.deviceName;
-            }
-            if (!(0, tokenStore_js_1.loadTokens)()) {
-                console.log(picocolors_1.default.cyan("\nSpotify login"));
-                console.log("No saved Spotify session was found, so browser login will start now.");
-                await (0, auth_js_1.login)();
+                console.log(picocolors_1.default.dim(`Spotify Desktop detected.`));
             }
             await (0, visualizer_js_1.runVisualizer)({
                 ...opts,

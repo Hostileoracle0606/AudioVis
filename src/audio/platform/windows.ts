@@ -30,7 +30,8 @@ export function createWindowsAudioSource(opts: AudioSourceOptions): AudioSource 
   let proc: ChildProcess | null = null;
   const listeners: Array<(frame: Float32Array) => void> = [];
   let buffer = Buffer.alloc(0);
-  const bytesPerFrame = frameSize * 4;
+  const NUM_CHANNELS = 2;
+  const bytesPerFrame = frameSize * NUM_CHANNELS * 4;  // interleaved stereo f32le
 
   function buildArgs(): string[] {
     if (deviceName === "default") {
@@ -40,7 +41,7 @@ export function createWindowsAudioSource(opts: AudioSourceOptions): AudioSource 
         "-f", "wasapi",
         "-loopback", "1",
         "-i", "default",
-        "-ac", "1",
+        "-ac", String(NUM_CHANNELS),
         "-ar", String(sampleRate),
         "-f", "f32le",
         "pipe:1",
@@ -51,7 +52,7 @@ export function createWindowsAudioSource(opts: AudioSourceOptions): AudioSource 
       "-hide_banner", "-loglevel", "error",
       "-f", "dshow",
       "-i", `audio=${deviceName}`,
-      "-ac", "1",
+      "-ac", String(NUM_CHANNELS),
       "-ar", String(sampleRate),
       "-f", "f32le",
       "pipe:1",
@@ -60,7 +61,7 @@ export function createWindowsAudioSource(opts: AudioSourceOptions): AudioSource 
 
   return {
     getInfo(): AudioSourceInfo {
-      return { platform: "windows", device: deviceName, sampleRate, frameSize };
+      return { platform: "windows", device: deviceName, sampleRate, frameSize, numChannels: NUM_CHANNELS };
     },
 
     onFrame(cb: (frame: Float32Array) => void): void {
@@ -97,7 +98,7 @@ export function createWindowsAudioSource(opts: AudioSourceOptions): AudioSource 
             const fa = new Float32Array(
               frameBuffer.buffer,
               frameBuffer.byteOffset,
-              frameSize
+              frameSize * NUM_CHANNELS
             );
             for (const cb of listeners) cb(fa);
           }

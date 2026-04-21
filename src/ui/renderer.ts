@@ -13,6 +13,7 @@ export class Renderer {
   private cols: number;
   private rows: number;
   private cells: string[];
+  private prevLines: string[] = [];
 
   constructor(cols: number, rows: number) {
     this.cols = cols;
@@ -24,6 +25,7 @@ export class Renderer {
     this.cols = cols;
     this.rows = rows;
     this.cells = new Array(cols * rows).fill(" ");
+    this.prevLines = [];
   }
 
   /** Fill the entire buffer with spaces. */
@@ -93,15 +95,58 @@ export class Renderer {
    * Build the full frame string and write it to stdout in one call.
    * Moves cursor to top-left first (no full clear = less flicker).
    */
-  flush(): void {
-    const lines: string[] = [];
+  private buildLines(): string[] {
+    const out: string[] = [];
     for (let row = 0; row < this.rows; row++) {
-      lines.push(
+      out.push(
         this.cells.slice(row * this.cols, row * this.cols + this.cols).join("")
       );
     }
-    // ESC[H = cursor home (top-left), no screen clear
+    return out;
+  }
+
+  /**
+   * Full-frame flush: positions cursor at top-left and emits every row.
+   * Use on first paint, after resize, and after `invalidate()`.
+   */
+  flush(): void {
+    const lines = this.buildLines();
     process.stdout.write("\x1b[H" + lines.join("\n"));
+    this.prevLines = lines;
+  }
+
+  /**
+   * Per-row dirty flush: emits only rows that differ from the previous frame,
+   * each prefixed with `ESC[<r>;1H\x1b[0m` so the cursor jumps to the row and
+   * SGR state is reset. One `stdout.write` call total → terminals draw atomically.
+   */
+  flushDirty(): void {
+    const lines = this.buildLines();
+    let out = "";
+    for (let row = 0; row < this.rows; row++) {
+      if (lines[row] !== this.prevLines[row]) {
+        out += `\x1b[${row + 1};1H\x1b[0m${lines[row]}`;
+      }
+    }
+    if (out) process.stdout.write(out);
+    this.prevLines = lines;
+  }
+
+  /** Drop the cached previous frame so the next `flushDirty` resends everything. */
+  invalidate(): void {
+    this.prevLines = [];
+  }
+
+  /** Test-only: return current cell buffer rows with SGR stripped. */
+  debugLines(): string[] {
+    const out: string[] = [];
+    for (let row = 0; row < this.rows; row++) {
+      const raw = this.cells
+        .slice(row * this.cols, row * this.cols + this.cols)
+        .join("");
+      out.push(raw.replace(/\x1b\[[0-9;]*m/g, ""));
+    }
+    return out;
   }
 
   get width(): number {

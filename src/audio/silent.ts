@@ -10,7 +10,8 @@ import type { AudioSource, AudioSourceOptions, AudioSourceInfo } from "./AudioSo
 export function createSilentAudioSource(opts: AudioSourceOptions): AudioSource {
   const { sampleRate, frameSize } = opts;
   const listeners: Array<(frame: Float32Array) => void> = [];
-  const zeros = new Float32Array(frameSize);
+  const NUM_CHANNELS = 2;
+  const zeros = new Float32Array(frameSize * NUM_CHANNELS);  // interleaved stereo
   let timer: ReturnType<typeof setInterval> | null = null;
 
   // Emit frames at ~30 Hz (matching the default render FPS)
@@ -18,7 +19,7 @@ export function createSilentAudioSource(opts: AudioSourceOptions): AudioSource {
 
   return {
     getInfo(): AudioSourceInfo {
-      return { platform: process.platform, device: "silent", sampleRate, frameSize };
+      return { platform: process.platform, device: "silent", sampleRate, frameSize, numChannels: NUM_CHANNELS };
     },
 
     onFrame(cb: (frame: Float32Array) => void): void {

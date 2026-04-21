@@ -1,0 +1,1 @@
+{"version":3,"file":"lyricsFeeder.d.ts","sourceRoot":"","sources":["../../../src/player/feeders/lyricsFeeder.ts"],"names":[],"mappings":"AACA,OAAO,KAAK,EAAE,QAAQ,EAAW,MAAM,aAAa,CAAC;AAIrD,wBAAsB,cAAc,CAClC,KAAK,EAAE,QAAQ,EACf,KAAK,EAAE,MAAM,EACb,MAAM,EAAE,MAAM,EACd,KAAK,EAAE,MAAM,GACZ,OAAO,CAAC,IAAI,CAAC,CAiBf;AAED,wBAAgB,iBAAiB,CAAC,KAAK,EAAE,QAAQ,GAAG,IAAI,CAGvD"}

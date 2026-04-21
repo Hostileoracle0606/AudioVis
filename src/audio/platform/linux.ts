@@ -38,11 +38,12 @@ export function createLinuxAudioSource(opts: AudioSourceOptions): AudioSource {
   let proc: ChildProcess | null = null;
   const listeners: Array<(frame: Float32Array) => void> = [];
   let buffer = Buffer.alloc(0);
-  const bytesPerFrame = frameSize * 4; // f32le = 4 bytes
+  const NUM_CHANNELS = 2;
+  const bytesPerFrame = frameSize * NUM_CHANNELS * 4;  // interleaved stereo f32le
 
   return {
     getInfo(): AudioSourceInfo {
-      return { platform: "linux", device, sampleRate, frameSize };
+      return { platform: "linux", device, sampleRate, frameSize, numChannels: NUM_CHANNELS };
     },
 
     onFrame(cb: (frame: Float32Array) => void): void {
@@ -57,7 +58,7 @@ export function createLinuxAudioSource(opts: AudioSourceOptions): AudioSource {
           "--raw",
           "--format=float32le",
           `--rate=${sampleRate}`,
-          "--channels=1",
+          `--channels=${NUM_CHANNELS}`,
           "--latency-msec=50",
         ];
 
@@ -71,7 +72,7 @@ export function createLinuxAudioSource(opts: AudioSourceOptions): AudioSource {
               "--target", device,
               "--format", "f32",
               `--rate=${sampleRate}`,
-              "--channels=1",
+              `--channels=${NUM_CHANNELS}`,
               "-",
             ],
             { stdio: ["ignore", "pipe", "pipe"] }
@@ -107,7 +108,7 @@ export function createLinuxAudioSource(opts: AudioSourceOptions): AudioSource {
               const fa = new Float32Array(
                 frameBuffer.buffer,
                 frameBuffer.byteOffset,
-                frameSize
+                frameSize * NUM_CHANNELS
               );
               for (const cb of listeners) cb(fa);
             }

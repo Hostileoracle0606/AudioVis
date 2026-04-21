@@ -12,6 +12,7 @@ export declare class Renderer {
     private cols;
     private rows;
     private cells;
+    private prevLines;
     constructor(cols: number, rows: number);
     resize(cols: number, rows: number): void;
     /** Fill the entire buffer with spaces. */
@@ -38,7 +39,22 @@ export declare class Renderer {
      * Build the full frame string and write it to stdout in one call.
      * Moves cursor to top-left first (no full clear = less flicker).
      */
+    private buildLines;
+    /**
+     * Full-frame flush: positions cursor at top-left and emits every row.
+     * Use on first paint, after resize, and after `invalidate()`.
+     */
     flush(): void;
+    /**
+     * Per-row dirty flush: emits only rows that differ from the previous frame,
+     * each prefixed with `ESC[<r>;1H\x1b[0m` so the cursor jumps to the row and
+     * SGR state is reset. One `stdout.write` call total → terminals draw atomically.
+     */
+    flushDirty(): void;
+    /** Drop the cached previous frame so the next `flushDirty` resends everything. */
+    invalidate(): void;
+    /** Test-only: return current cell buffer rows with SGR stripped. */
+    debugLines(): string[];
     get width(): number;
     get height(): number;
 }

@@ -5,6 +5,7 @@ exports.play = play;
 exports.pause = pause;
 exports.nextTrack = nextTrack;
 exports.previousTrack = previousTrack;
+exports.playTrack = playTrack;
 const child_process_1 = require("child_process");
 const util_1 = require("util");
 const execFileAsync = (0, util_1.promisify)(child_process_1.execFile);
@@ -101,4 +102,15 @@ async function play() { await tell("play"); }
 async function pause() { await tell("pause"); }
 async function nextTrack() { await tell("next track"); }
 async function previousTrack() { await tell("previous track"); }
+/**
+ * Play a Spotify track by URI. The URI must be of the form
+ * `spotify:track:<id>` — this is what `/v1/search` returns and what
+ * Spotify's AppleScript dictionary's `play track` verb accepts.
+ */
+async function playTrack(uri) {
+    if (!/^spotify:track:[A-Za-z0-9]+$/.test(uri)) {
+        throw new Error(`Invalid Spotify track URI: ${JSON.stringify(uri)} (expected form spotify:track:<id>)`);
+    }
+    await tell(`play track "${uri}"`);
+}
 //# sourceMappingURL=spotifyDesktop.js.map
