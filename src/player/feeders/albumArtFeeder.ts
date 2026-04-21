@@ -19,6 +19,8 @@ export async function fetchAlbumArt(
     const art = await convertToAscii(buf, cacheKey, cellCols * 2, cellRows * 2, noColor);
     setCached(cacheKey, art);
     state.albumArt = art;
+    state.padFingerprints[0] = art.padFingerprint;
+    state.activePadIndex = 0;
   } catch {
     state.albumArt = null;
   }

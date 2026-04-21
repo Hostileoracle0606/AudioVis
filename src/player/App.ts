@@ -18,10 +18,11 @@ import { performance } from "node:perf_hooks";
 import { renderTitleBar } from "./widgets/titleBar.js";
 import { renderAlbumArt } from "./widgets/albumArt.js";
 import { renderNowPlaying } from "./widgets/nowPlaying.js";
-import { renderRecentlyPlayed } from "./widgets/recentlyPlayed.js";
+import { renderQueuePads } from "./widgets/queuePads.js";
 import { renderLyrics } from "./widgets/lyrics.js";
 import { renderSpectrum } from "./widgets/spectrum.js";
 import { renderControls } from "./widgets/controls.js";
+import { resolveAccentTargets } from "./accentArbiter.js";
 
 export interface AppOptions { audio: AudioSource; noColor: boolean; }
 
@@ -62,6 +63,8 @@ export class App {
     this.stopSpotify = startSpotifyFeeder(this.state, (title, artist, album, artUrl) => {
       this.progressBaselineAt = Date.now();
       this.progressBaselineMs = this.state.progressMs;
+      this.state.progressEnvelope.fill(0);
+      this.state.activePadIndex = 0;
       const L = computeAppLayout(this.state.cols, this.state.rows);
       void fetchAlbumArt(this.state, artUrl, L.screenR.width - 4, L.screenR.height - 3, this.opts.noColor);
       void fetchLyricsFor(this.state, title, artist, album);
@@ -118,6 +121,8 @@ export class App {
 
     const theme = buildTheme(this.state.spectrumPaletteIndex, this.opts.noColor);
 
+    const accent = resolveAccentTargets(this.state, Date.now());
+
     drawOuterFrame(this.renderer);
     drawHSeparator(this.renderer, L.sep1Y, { down: L.sep1Down, up: [] });
     drawHSeparator(this.renderer, L.sep2Y, { down: L.sep2Down, up: L.sep2Up });
@@ -126,12 +131,12 @@ export class App {
     drawVDivider(this.renderer, L.sep1Down[1], L.topRow.y, L.topRow.y + L.topRow.height - 1);
     drawVDivider(this.renderer, L.sep2Down[0], L.middleRow.y, L.middleRow.y + L.middleRow.height - 1);
 
-    renderTitleBar(this.renderer, L, this.state, theme, new Set());
+    renderTitleBar(this.renderer, L, this.state, theme, accent);
     renderAlbumArt(this.renderer, L.screenR, this.state, theme);
     renderNowPlaying(this.renderer, L.nowR, this.state, theme);
-    renderRecentlyPlayed(this.renderer, L.padsR, this.state, theme);
-    renderLyrics(this.renderer, L.lyricsR, this.state, theme, new Set());
-    renderSpectrum(this.renderer, L.spectrumR, this.state, theme, new Set());
+    renderQueuePads(this.renderer, L.padsR, this.state, theme);
+    renderLyrics(this.renderer, L.lyricsR, this.state, theme, accent);
+    renderSpectrum(this.renderer, L.spectrumR, this.state, theme, accent);
     renderControls(this.renderer, L, this.state, theme);
 
     this.renderer.flushDirty();
@@ -139,6 +144,10 @@ export class App {
 
   private handleInput(e: InputEvent): void {
     if (e.kind === "quit") { void this.stop().then(() => process.exit(0)); return; }
+    if (e.kind === "play_pad") {
+      if (this.state.recentlyPlayed[e.slot]) this.state.activePadIndex = e.slot;
+      return;
+    }
     if (this.state.search.focused) {
       this.handleTextInput(e);
     } else {

@@ -12,6 +12,7 @@ export type HotkeyAction =
 
 export type InputEvent =
   | { kind: "hotkey"; action: HotkeyAction }
+  | { kind: "play_pad"; slot: number }
   | { kind: "text"; char: string }
   | { kind: "edit"; op: "backspace" | "enter" | "escape" }
   | { kind: "nav"; dir: "up" | "down" | "left" | "right" }
@@ -41,6 +42,10 @@ export function dispatchKey(
   const mode = getMode();
   if (mode === "hotkey") {
     const name = key.name ?? key.sequence ?? "";
+    if (name.length === 1 && name >= "1" && name <= "8") {
+      emit({ kind: "play_pad", slot: parseInt(name, 10) - 1 });
+      return;
+    }
     const act = HOTKEYS[name];
     if (act) emit({ kind: "hotkey", action: act });
     return;
