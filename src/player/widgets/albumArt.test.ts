@@ -5,25 +5,40 @@ import { renderAlbumArt } from "./albumArt.js";
 import { createInitialState } from "../state.js";
 import { buildTheme } from "../theme.js";
 
-test("albumArt shows label in blank mode", () => {
-  const r = new Renderer(40, 10);
-  const s = createInitialState(40, 10);
-  s.artCellMode = "blank";
-  renderAlbumArt(r, { x: 0, y: 0, width: 40, height: 10 }, s, buildTheme(0, true));
-  assert.ok(r.debugLines().join("\n").includes("ALBUM ART"));
+test("renderAlbumArt draws the framed [ screen · NNN ] label", () => {
+  const r = new Renderer(40, 15);
+  const s = createInitialState(40, 15);
+  s.recentlyPlayed = [{
+    trackName: "x", artistName: "y", albumName: "z", albumArtUrl: "", deviceName: "s",
+    isPlaying: true, progressMs: 0, durationMs: 0,
+  }];
+  renderAlbumArt(r, { x: 0, y: 0, width: 40, height: 15 }, s, buildTheme(0, true));
+  const all = r.debugLines().join("\n");
+  assert.match(all, /screen \u00B7 \d{3}/);
 });
 
-test("albumArt renders provided AsciiArt lines in art mode", () => {
-  const r = new Renderer(40, 10);
-  const s = createInitialState(40, 10);
-  s.artCellMode = "art";
-  s.albumArt = {
-    trackId: "x", thumbnail: [], lines: ["AAAAA", "BBBBB"],
-    fullCols: 5, fullRows: 2, playerLines: [], playerCols: 0, playerRows: 0,
-    cols: 40, rows: 10, padFingerprint: new Uint8Array(16),
-  };
-  renderAlbumArt(r, { x: 0, y: 0, width: 40, height: 10 }, s, buildTheme(0, true));
-  const lines = r.debugLines();
-  assert.ok(lines.some((l) => l.includes("AAAAA")));
-  assert.ok(lines.some((l) => l.includes("BBBBB")));
+test("renderAlbumArt footer shows metadata row", () => {
+  const r = new Renderer(40, 15);
+  const s = createInitialState(40, 15);
+  s.rms = 0.73;
+  renderAlbumArt(r, { x: 0, y: 0, width: 40, height: 15 }, s, buildTheme(0, true));
+  const all = r.debugLines().join("\n");
+  assert.ok(all.includes("rms 0.73"));
+});
+
+test("renderAlbumArt shows — no art — when albumArt null", () => {
+  const r = new Renderer(40, 15);
+  const s = createInitialState(40, 15);
+  renderAlbumArt(r, { x: 0, y: 0, width: 40, height: 15 }, s, buildTheme(0, true));
+  const all = r.debugLines().join("\n");
+  assert.ok(all.includes("no art") || all.includes("\u2014"));
+});
+
+test("blank mode shows [ OFF ]", () => {
+  const r = new Renderer(40, 15);
+  const s = createInitialState(40, 15);
+  s.artCellMode = "blank";
+  renderAlbumArt(r, { x: 0, y: 0, width: 40, height: 15 }, s, buildTheme(0, true));
+  const all = r.debugLines().join("\n");
+  assert.ok(all.includes("OFF"));
 });
