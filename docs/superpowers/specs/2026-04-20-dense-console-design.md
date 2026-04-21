@@ -142,10 +142,17 @@ Fixed-width (`NOW_W = 34`), four stacked sub-sections separated by dotted rules:
    - **Decision:** title at **1× size** (regular text, `theme.fg` bold-equivalent — truecolor bright) in the fixed panel. Big-type bitfont is reserved for the **active lyric only** (§5.4) to preserve scale-contrast uniqueness. Rationale: two bitfont elements would split attention and dilute hierarchy. The title gets attention via position (top of panel), color (hero fg), and the `▸` glyph marker.
 2. **Track DNA strip** (3 rows)
    - Rule: `├───· track dna ──────────────┤`
-   - `bpm --- · key -- · -- lufs` (one row) — all values show `---` / `--` placeholders in this cycle (no audio-features API wired; §10 out-of-scope)
-   - `eng ▯▯▯▯▯▯▯ --   val ▯▯▯▯▯▯▯ --` (one row) — empty gauges with `--` readout, visible as chrome density until API lands
-   - `dan ▯▯▯▯▯▯▯ --   aco ▯▯▯▯▯▯▯ --` (one row)
-   - **Exception — energy bar is live**: `eng` uses a rolling 2-second RMS average from the audioFeeder as a live derived-energy readout. This is the one non-placeholder segment in this strip and makes the panel feel reactive even pre-API.
+   - `bpm NNN · key XXX · -N lufs` (one row)
+   - `eng ▮▮▮▮▮▯▯ NN   val ▮▮▯▯▯▯▯ NN` (one row)
+   - `dan ▮▮▮▮▯▯▯ NN   aco ▮▮▮▯▯▯▯ NN` (one row)
+   - **Values are deterministic from `trackId`** — not from any audio-features API (out of scope this cycle). A pure function `computeDna(trackId: string): TrackDna` hashes the track ID (djb2 or FNV-1a) and slots bits into plausible ranges:
+     - `bpm`: 72–168 (from bits 0–6)
+     - `keyIndex`: 0–11 → mapped to `c / c# / d / ...` (bits 7–10)
+     - `keyMode`: `maj` / `min` (bit 11)
+     - `lufs`: -4 to -19 (bits 12–15)
+     - `energy`, `valence`, `danceability`, `acousticness`: 0–100 (bits 16–23, 24–31, then re-hash for last two)
+   - Because the function is pure of `trackId`, values are **stable per track** (metadata doesn't jitter mid-song) and **varied across tracks** (different hashes → different values). Same track plays tomorrow → same DNA.
+   - When the Spotify Web API audio-features integration lands later (§10), the call site in `renderNowPlaying` switches from `computeDna(trackId)` to reading real values off `state.nowPlaying.audioFeatures`. Single-point swap. The gauge rendering code doesn't care where the values came from.
 3. **Meter strip** (3 rows)
    - Rule: `├───· meter strip ─────────────┤`
    - `L {braille-bar} NN%` — uses the existing ansilize style with peak-hold dot
@@ -351,35 +358,41 @@ Tests are written first for each unit, driving the implementation. All tests use
    - scroll: offset increments at constant rate
    - transient → uses `theme.accentBright`, else `theme.accent`
 
-5. **`queuePads.test.ts`**:
+5. **`trackDna.test.ts`**:
+   - `computeDna(id)` returns same object every call (determinism)
+   - Different IDs produce different `bpm` with high probability (sample 100 IDs, assert ≥ 90 unique bpms)
+   - All outputs within declared ranges (bpm 72-168, energy/valence/dance/aco 0-100, lufs -19 to -4)
+   - `keyIndex` ∈ [0,11], `keyMode` ∈ {"maj","min"}
+
+6. **`queuePads.test.ts`**:
    - 8 pads rendered in 2×4 grid with correct positions
    - active pad header uses accent color
    - fingerprint bytes render as `●` for 1-bits and `·` for 0-bits
    - footer reflects active pad's name + bpm
    - empty slot renders `┌NN──┐` + `····` placeholder
 
-6. **`spectrum.test.ts`** (update existing):
+7. **`spectrum.test.ts`** (update existing):
    - peak-hold `●` row present
    - bass-bin column gets accent when `bass-bin` is in accent set
    - frequency labels present on header row
 
-7. **`progressWave.test.ts`** (new, from `controls.ts`):
+8. **`progressWave.test.ts`** (new, from `controls.ts`):
    - envelope ring buffer → correct Braille glyph per slot
    - playhead column in accent
    - transient → playhead at max (`⣿`)
 
-8. **`titleBar.test.ts`** (update existing):
+9. **`titleBar.test.ts`** (update existing):
    - two rows rendered
    - status-LED strip has 6 LEDs
    - sync LED toggles on `transientPeak` recency
 
-9. **Integration**: `App.test.ts` (new) — builds `App`, steps one frame with a canned state, snapshots all visible lines, verifies no `┼` chars, no overlap between regions.
+10. **Integration**: `App.test.ts` (new) — builds `App`, steps one frame with a canned state, snapshots all visible lines, verifies no `┼` chars, no overlap between regions.
 
 ## 9. Migration & cleanup
 
 - **Delete**: `src/player/widgets/recentlyPlayed.ts` + test file. `pushRecentlyPlayed` stays (feeds the queue pads now).
 - **Rename**: `widgets/albumArt.ts` → keep name; internal logic changes but widget-level API (`renderAlbumArt(r, region, state, theme)`) stays identical so `App.ts` wiring is unchanged
-- **New modules**: `widgets/queuePads.ts`, `widgets/bigLyric.ts`, `accentArbiter.ts`, `peakHold.ts`
+- **New modules**: `widgets/queuePads.ts`, `widgets/bigLyric.ts`, `accentArbiter.ts`, `peakHold.ts`, `trackDna.ts`
 - **Updated**: `widgets/nowPlaying.ts`, `widgets/lyrics.ts`, `widgets/spectrum.ts`, `widgets/controls.ts`, `widgets/titleBar.ts`, `layout.ts`, `state.ts`, `theme.ts`, `album/converter.ts`
 - **App wiring** ([App.ts:118](../../../src/player/App.ts:118)): swap `renderRecentlyPlayed` call → `renderQueuePads`, pass `accentArbiter.resolveAccentTargets` result to each widget that needs it
 - **Keybinds** ([App.ts:149](../../../src/player/App.ts:149)): add cases `"play_pad_N"` for N=1..8 → `spotifyDesktop.playTrack(state.queuePads[N-1].uri)`. Register in [input.ts](../../../src/ui/input.ts).
@@ -394,7 +407,7 @@ Tests are written first for each unit, driving the implementation. All tests use
 
 **Out of scope (future):**
 - Spotify queue API integration (pads use `recentlyPlayed` as proxy for now)
-- Spotify audio-features API for track DNA (all DNA fields except the live `eng` bar render as `--` / empty gauges this cycle; when the API is wired later, values drop in without a UI rewrite)
+- Spotify audio-features API for track DNA — this cycle ships with deterministic-from-trackId fudged values (see §5.2). When the API is wired later, swap the data source at the single `computeDna(...)` call site; rendering is unchanged.
 - BPM detection from audio (bpm value shown is either from Spotify if available, else `---`)
 - Wiring `◦ mix`, `◦ eq`, `[⟲]`, `[◉ rec]` to actual functionality — these are chrome for now
 - Enabling `◦ tilt` / `◦ a-weight` spectrum toggles
