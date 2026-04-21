@@ -3,7 +3,7 @@ import type { Region } from "../../ui/tui.js";
 import type { AppState } from "../state.js";
 import type { Theme } from "../theme.js";
 
-const LABEL = "ALBUM ART";
+const LABEL = "[ ALBUM ART ]";
 
 export function renderAlbumArt(
   r: Renderer,

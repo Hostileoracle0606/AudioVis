@@ -4,12 +4,11 @@ import type { AppState } from "../state.js";
 import type { Theme } from "../theme.js";
 import { renderBigLine, GLYPH_H } from "../../ui/bitfont.js";
 
-const LABEL_PLAIN = "[ KINETIC LYRICS // SYNC: RMS ]";
 const LABEL_PEAK  = "[ TRANSIENT PEAK -> FONT-SCALE MAX ]";
 const BIG_THRESHOLD = 0.6;
 
 function clip(s: string, w: number): string {
-  return s.length <= w ? s : s.slice(0, Math.max(0, w - 1)) + "…";
+  return s.length <= w ? s : s.slice(0, Math.max(0, w - 1)) + "\u2026";
 }
 
 export function renderLyrics(
@@ -21,7 +20,9 @@ export function renderLyrics(
   if (region.width < 20 || region.height < 6) return;
   const xi = region.x + 2;
   const big = state.transientEnergy >= BIG_THRESHOLD;
-  r.write(xi, region.y, `${theme.dim}${big ? LABEL_PEAK : LABEL_PLAIN}${theme.reset}`);
+  const rms = state.rms.toFixed(2);
+  const labelPlain = `[ KINETIC LYRICS // SYNC: RMS ${rms} ]`;
+  r.write(xi, region.y, `${theme.dim}${big ? LABEL_PEAK : labelPlain}${theme.reset}`);
 
   const active = state.lyrics[state.activeLyricIndex];
   const prev = state.lyrics[state.activeLyricIndex - 1];

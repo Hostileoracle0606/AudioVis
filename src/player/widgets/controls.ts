@@ -30,10 +30,10 @@ export function renderControls(
   const pct = state.durationMs > 0 ? Math.min(1, state.progressMs / state.durationMs) : 0;
   const knobAt = trackX0 + Math.round(pct * trackW);
   for (let x = trackX0; x <= trackX1; x++) {
-    r.write(x, y, `${theme.dim}\u2500${theme.reset}`);
+    const filled = x <= knobAt;
+    r.write(x, y, filled ? `${theme.accent}\u2588${theme.reset}` : `${theme.dim}\u2591${theme.reset}`);
   }
-  r.write(knobAt, y, `${theme.accent}\u25CB${theme.reset}`);
 
-  const legend = "[p] Play   [n] Next   [b] Back   [m] Mute   [v] Vis Mode   [a] Art Toggle   [/] Search   [q] Quit";
+  const legend = "[p]lay  [n]ext  [b]ack  [m]ute  [v]is  [a]rt  [/]search  [q]uit";
   r.write(L.keysR.x + 2, L.keysR.y, `${theme.dim}${legend.slice(0, L.keysR.width - 4)}${theme.reset}`);
 }

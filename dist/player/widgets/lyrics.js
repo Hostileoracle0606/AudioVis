@@ -2,18 +2,19 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.renderLyrics = renderLyrics;
 const bitfont_js_1 = require("../../ui/bitfont.js");
-const LABEL_PLAIN = "[ KINETIC LYRICS // SYNC: RMS ]";
 const LABEL_PEAK = "[ TRANSIENT PEAK -> FONT-SCALE MAX ]";
 const BIG_THRESHOLD = 0.6;
 function clip(s, w) {
-    return s.length <= w ? s : s.slice(0, Math.max(0, w - 1)) + "…";
+    return s.length <= w ? s : s.slice(0, Math.max(0, w - 1)) + "\u2026";
 }
 function renderLyrics(r, region, state, theme) {
     if (region.width < 20 || region.height < 6)
         return;
     const xi = region.x + 2;
     const big = state.transientEnergy >= BIG_THRESHOLD;
-    r.write(xi, region.y, `${theme.dim}${big ? LABEL_PEAK : LABEL_PLAIN}${theme.reset}`);
+    const rms = state.rms.toFixed(2);
+    const labelPlain = `[ KINETIC LYRICS // SYNC: RMS ${rms} ]`;
+    r.write(xi, region.y, `${theme.dim}${big ? LABEL_PEAK : labelPlain}${theme.reset}`);
     const active = state.lyrics[state.activeLyricIndex];
     const prev = state.lyrics[state.activeLyricIndex - 1];
     const next = state.lyrics[state.activeLyricIndex + 1];

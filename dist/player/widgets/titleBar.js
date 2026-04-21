@@ -14,14 +14,15 @@ function renderTitleBar(r, L, state, theme) {
             r.write(sx + 1, sy, `${theme.fg}${prefix}${visible}${theme.reset}`);
         }
         else {
-            const hint = "(press / to search)";
+            const hint = "[ / to search ]";
             if (hint.length + 2 <= sw) {
-                r.write(sx + 1, sy, `${theme.dim}${hint}${theme.reset}`);
+                const hx = sx + Math.floor((sw - hint.length) / 2);
+                r.write(hx, sy, `${theme.dim}${hint}${theme.reset}`);
             }
         }
     }
     const cpu = state.cpuPct.toFixed(1).padStart(4, " ");
-    const right = `SYS.LOAD: ${cpu}%`;
+    const right = `[ SYS.LOAD ${cpu}% ]`;
     const rx = L.sysLoadR.x + Math.max(0, L.sysLoadR.width - right.length);
     r.write(rx, L.sysLoadR.y, `${theme.dim}${right}${theme.reset}`);
 }

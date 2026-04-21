@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.renderAlbumArt = renderAlbumArt;
-const LABEL = "ALBUM ART";
+const LABEL = "[ ALBUM ART ]";
 function renderAlbumArt(r, region, state, theme) {
     const xi = region.x + 2;
     r.write(xi, region.y, `${theme.dim}${LABEL}${theme.reset}`);

@@ -1,13 +1,14 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.renderSpectrum = renderSpectrum;
-const LABEL = "SPECTRUM ANALYZER // 16-BAND";
 const NUM_BARS = 16;
+const PALETTE_NAMES = ["AMBER", "TEAL", "MAGENTA", "MONO"];
 function renderSpectrum(r, region, state, theme) {
     if (region.width < 20 || region.height < 5)
         return;
     const xi = region.x + 2;
-    r.write(xi, region.y, `${theme.dim}[ ${LABEL} ]${theme.reset}`);
+    const paletteName = PALETTE_NAMES[state.spectrumPaletteIndex % PALETTE_NAMES.length];
+    r.write(xi, region.y, `${theme.dim}[ SPECTRUM // ${paletteName} ]${theme.reset}`);
     const plotY = region.y + 2;
     const plotH = region.height - 3;
     const plotX = region.x + 2;

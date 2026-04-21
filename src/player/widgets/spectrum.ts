@@ -3,8 +3,8 @@ import type { Region } from "../../ui/tui.js";
 import type { AppState } from "../state.js";
 import type { Theme } from "../theme.js";
 
-const LABEL = "SPECTRUM ANALYZER // 16-BAND";
 const NUM_BARS = 16;
+const PALETTE_NAMES = ["AMBER", "TEAL", "MAGENTA", "MONO"];
 
 export function renderSpectrum(
   r: Renderer,
@@ -14,7 +14,8 @@ export function renderSpectrum(
 ): void {
   if (region.width < 20 || region.height < 5) return;
   const xi = region.x + 2;
-  r.write(xi, region.y, `${theme.dim}[ ${LABEL} ]${theme.reset}`);
+  const paletteName = PALETTE_NAMES[state.spectrumPaletteIndex % PALETTE_NAMES.length];
+  r.write(xi, region.y, `${theme.dim}[ SPECTRUM // ${paletteName} ]${theme.reset}`);
 
   const plotY = region.y + 2;
   const plotH = region.height - 3;
