@@ -126,7 +126,7 @@ export class App {
     drawVDivider(this.renderer, L.sep1Down[1], L.topRow.y, L.topRow.y + L.topRow.height - 1);
     drawVDivider(this.renderer, L.sep2Down[0], L.middleRow.y, L.middleRow.y + L.middleRow.height - 1);
 
-    renderTitleBar(this.renderer, L, this.state, theme);
+    renderTitleBar(this.renderer, L, this.state, theme, new Set());
     renderAlbumArt(this.renderer, L.screenR, this.state, theme);
     renderNowPlaying(this.renderer, L.nowR, this.state, theme);
     renderRecentlyPlayed(this.renderer, L.padsR, this.state, theme);
