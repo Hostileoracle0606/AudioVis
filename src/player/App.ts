@@ -63,7 +63,7 @@ export class App {
       this.progressBaselineAt = Date.now();
       this.progressBaselineMs = this.state.progressMs;
       const L = computeAppLayout(this.state.cols, this.state.rows);
-      void fetchAlbumArt(this.state, artUrl, L.artR.width - 4, L.artR.height - 3, this.opts.noColor);
+      void fetchAlbumArt(this.state, artUrl, L.screenR.width - 4, L.screenR.height - 3, this.opts.noColor);
       void fetchLyricsFor(this.state, title, artist, album);
     });
     this.stopCpu = startCpuFeeder(this.state);
@@ -127,9 +127,9 @@ export class App {
     drawVDivider(this.renderer, L.sep2Down[0], L.middleRow.y, L.middleRow.y + L.middleRow.height - 1);
 
     renderTitleBar(this.renderer, L, this.state, theme);
-    renderAlbumArt(this.renderer, L.artR, this.state, theme);
+    renderAlbumArt(this.renderer, L.screenR, this.state, theme);
     renderNowPlaying(this.renderer, L.nowR, this.state, theme);
-    renderRecentlyPlayed(this.renderer, L.recentR, this.state, theme);
+    renderRecentlyPlayed(this.renderer, L.padsR, this.state, theme);
     renderLyrics(this.renderer, L.lyricsR, this.state, theme);
     renderSpectrum(this.renderer, L.spectrumR, this.state, theme);
     renderControls(this.renderer, L, this.state, theme);
