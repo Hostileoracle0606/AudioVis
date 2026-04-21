@@ -1,8 +1,8 @@
-# TUI·AMP v4.0
+# AMP
 
 > A Spotify-connected terminal music visualizer — rendered entirely in your shell with ANSI block glyphs, Braille dot-matrix, and cava-style FFT analysis.
 
-![TUI·AMP demo](docs/demo.gif)
+![AMP demo](docs/demo.gif)
 
 ---
 
@@ -149,7 +149,7 @@ npm run dev -- spotify volume 80
 ```
 Spotify Web API ─────────────── track metadata · playback state · album art · lyrics
                                         │
-                               TUI·AMP render loop (30 fps)
+                               AMP render loop (30 fps)
                                         │
 system audio → loopback capture → 2048-point FFT → cava-style magnitude bins
                                         │
@@ -197,7 +197,7 @@ Tests use Node's built-in `node:test` runner and hit no network. The renderer ex
 
 ```
 src/
-  player/           # TUI·AMP app — state, layout, feeders, widgets
+  player/           # AMP app — state, layout, feeders, widgets
     widgets/        # albumArt · nowPlaying · lyrics · spectrum · controls · titleBar · queuePads
     feeders/        # spotify · albumArt · lyrics · audio polling loops
   ui/               # renderer · input · bitfont · tui layout primitives
