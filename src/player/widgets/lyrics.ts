@@ -2,13 +2,11 @@ import type { Renderer } from "../../ui/renderer.js";
 import type { Region } from "../../ui/tui.js";
 import type { AppState } from "../state.js";
 import type { Theme } from "../theme.js";
-import { renderBigLine, GLYPH_H } from "../../ui/bitfont.js";
+import type { AccentTarget } from "../accentArbiter.js";
+import { renderBigLyric } from "./bigLyric.js";
 
-const LABEL_PEAK  = "[ TRANSIENT PEAK -> FONT-SCALE MAX ]";
-const BIG_THRESHOLD = 0.6;
-
-function clip(s: string, w: number): string {
-  return s.length <= w ? s : s.slice(0, Math.max(0, w - 1)) + "\u2026";
+function truncate(s: string, max: number): string {
+  return s.length <= max ? s : s.slice(0, Math.max(0, max - 1)) + "\u2026";
 }
 
 export function renderLyrics(
@@ -16,31 +14,42 @@ export function renderLyrics(
   region: Region,
   state: AppState,
   theme: Theme,
+  accent: Set<AccentTarget>,
 ): void {
-  if (region.width < 20 || region.height < 6) return;
+  if (region.width < 20 || region.height < 4) return;
+
   const xi = region.x + 2;
-  const big = state.transientEnergy >= BIG_THRESHOLD;
-  const rms = state.rms.toFixed(2);
-  const labelPlain = `[ KINETIC LYRICS // SYNC: RMS ${rms} ]`;
-  r.write(xi, region.y, `${theme.dim}${big ? LABEL_PEAK : labelPlain}${theme.reset}`);
+  const pad = region.width - 4;
+  r.write(xi, region.y, `${theme.dim}[ lyrics \u00B7 sync rms ${state.rms.toFixed(2)} \u00B7 lrclib ]${theme.reset}`);
 
-  const active = state.lyrics[state.activeLyricIndex];
-  const prev = state.lyrics[state.activeLyricIndex - 1];
-  const next = state.lyrics[state.activeLyricIndex + 1];
-
-  const bodyY = region.y + 2;
-  const bodyW = region.width - 4;
-
-  if (prev) r.write(xi, bodyY, `${theme.dim}${clip(prev.text, bodyW)}${theme.reset}`);
-  if (next) r.write(xi, bodyY + Math.min(region.height - 4, 1 + (big ? GLYPH_H : 1)), `${theme.dim}${clip(next.text, bodyW)}${theme.reset}`);
-
-  if (!active) return;
-  if (big) {
-    const rows = renderBigLine(active.text);
-    for (let i = 0; i < Math.min(GLYPH_H, region.height - 5); i++) {
-      r.write(xi, bodyY + 1 + i, `${theme.fg}${clip(rows[i], bodyW)}${theme.reset}`);
-    }
-  } else {
-    r.write(xi, bodyY + 1, `${theme.fg}${clip(active.text, bodyW)}${theme.reset}`);
+  if (state.lyrics.length === 0) {
+    r.write(xi, region.y + 2, `${theme.dim}\u2014 no lyrics \u2014${theme.reset}`);
+    return;
   }
+
+  const idx = state.activeLyricIndex;
+  const prev = idx > 0 ? state.lyrics[idx - 1]?.text : null;
+  const active = idx >= 0 ? state.lyrics[idx]?.text : null;
+  const next = idx + 1 < state.lyrics.length ? state.lyrics[idx + 1]?.text : null;
+
+  if (prev) {
+    r.write(xi, region.y + 1, `${theme.dim}\u00B7 ${truncate(prev, pad - 2)}${theme.reset}`);
+  }
+
+  if (active) {
+    const bright = accent.has("sync") || accent.has("bass-bin");
+    renderBigLyric(
+      r,
+      { x: region.x, y: region.y + 1, width: region.width, height: Math.min(region.height - 2, 5) },
+      { text: active, bright },
+      theme,
+    );
+  }
+
+  if (next && region.height >= 8) {
+    r.write(xi, region.y + region.height - 2, `${theme.dim}\u00B7 ${truncate(next, pad - 2)}${theme.reset}`);
+  }
+  const dotRow = region.y + region.height - 1;
+  const dots = "\u00B7 ".repeat(Math.floor(pad / 2));
+  r.write(xi, dotRow, `${theme.dim}${dots}${theme.reset}`);
 }

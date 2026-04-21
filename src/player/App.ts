@@ -130,7 +130,7 @@ export class App {
     renderAlbumArt(this.renderer, L.screenR, this.state, theme);
     renderNowPlaying(this.renderer, L.nowR, this.state, theme);
     renderRecentlyPlayed(this.renderer, L.padsR, this.state, theme);
-    renderLyrics(this.renderer, L.lyricsR, this.state, theme);
+    renderLyrics(this.renderer, L.lyricsR, this.state, theme, new Set());
     renderSpectrum(this.renderer, L.spectrumR, this.state, theme, new Set());
     renderControls(this.renderer, L, this.state, theme);
 
