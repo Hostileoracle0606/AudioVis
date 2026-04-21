@@ -66,3 +66,27 @@ export function renderBigLine(text: string): string[] {
   }
   return lines;
 }
+
+/**
+ * Pack every 2 rows of input into 1 row of output using half-block glyphs.
+ * Treats any non-space character as "on". Output uses only:
+ *   ▀ (top half)   ▄ (bottom half)   █ (both)   space (neither)
+ * If input has an odd number of rows, the last row is treated as a top
+ * half with an empty bottom.
+ */
+export function compressToHalfBlock(rows: string[]): string[] {
+  const out: string[] = [];
+  const width = rows.length > 0 ? rows[0].length : 0;
+  for (let r = 0; r < rows.length; r += 2) {
+    const top = rows[r] ?? "";
+    const bot = rows[r + 1] ?? "";
+    let line = "";
+    for (let c = 0; c < width; c++) {
+      const t = (top[c] ?? " ") !== " ";
+      const b = (bot[c] ?? " ") !== " ";
+      line += t && b ? "\u2588" : t ? "\u2580" : b ? "\u2584" : " ";
+    }
+    out.push(line);
+  }
+  return out;
+}

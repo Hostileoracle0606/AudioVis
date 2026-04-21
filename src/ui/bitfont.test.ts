@@ -38,3 +38,37 @@ test("renderBigLine handles missing glyph by substituting space", () => {
   const rows = renderBigLine("~");
   for (const r of rows) assert.match(r, /^ +$/);
 });
+
+import { compressToHalfBlock } from "./bitfont.js";
+
+test("compressToHalfBlock halves row count", () => {
+  const lines = renderBigLine("HI");
+  assert.strictEqual(lines.length, 8);
+  const compressed = compressToHalfBlock(lines);
+  assert.strictEqual(compressed.length, 4);
+});
+
+test("compressToHalfBlock uses ▀▄█ and space only", () => {
+  const compressed = compressToHalfBlock(renderBigLine("ABC"));
+  for (const line of compressed) {
+    for (const ch of line) {
+      assert.ok(
+        ch === "\u2580" || ch === "\u2584" || ch === "\u2588" || ch === " ",
+        `unexpected char ${JSON.stringify(ch)} in compressed output`,
+      );
+    }
+  }
+});
+
+test("compressToHalfBlock preserves width", () => {
+  const wide = renderBigLine("HELLO");
+  const compressed = compressToHalfBlock(wide);
+  assert.strictEqual(compressed[0].length, wide[0].length);
+});
+
+test("compressToHalfBlock: top-only = ▀, bottom-only = ▄, both = █, neither = space", () => {
+  const input = ["\u2588  \u2588", "   \u2588"];
+  const out = compressToHalfBlock(input);
+  assert.strictEqual(out.length, 1);
+  assert.strictEqual(out[0], "\u2580  \u2588");
+});
