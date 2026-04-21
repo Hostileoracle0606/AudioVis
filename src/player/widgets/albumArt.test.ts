@@ -20,7 +20,7 @@ test("albumArt renders provided AsciiArt lines in art mode", () => {
   s.albumArt = {
     trackId: "x", thumbnail: [], lines: ["AAAAA", "BBBBB"],
     fullCols: 5, fullRows: 2, playerLines: [], playerCols: 0, playerRows: 0,
-    cols: 40, rows: 10,
+    cols: 40, rows: 10, padFingerprint: new Uint8Array(16),
   };
   renderAlbumArt(r, { x: 0, y: 0, width: 40, height: 10 }, s, buildTheme(0, true));
   const lines = r.debugLines();

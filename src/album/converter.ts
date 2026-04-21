@@ -17,6 +17,26 @@ export interface AsciiArt {
   /** Terminal dimensions at conversion time — stale-check on resize. */
   cols: number;
   rows: number;
+  /** 4×4 binary perceptual hash for queue pad icons (16 bytes, each 0 or 1). */
+  padFingerprint: Uint8Array;
+}
+
+function computePadFingerprint(img: Jimp): Uint8Array {
+  const small = img.clone().resize(4, 4);
+  const out = new Uint8Array(16);
+  let totalLuma = 0;
+  const luma: number[] = [];
+  small.scan(0, 0, 4, 4, function(this: Jimp, _x: number, _y: number, idx: number) {
+    const rr = this.bitmap.data[idx];
+    const gg = this.bitmap.data[idx + 1];
+    const bb = this.bitmap.data[idx + 2];
+    const y = 0.299 * rr + 0.587 * gg + 0.114 * bb;
+    luma.push(y);
+    totalLuma += y;
+  });
+  const mean = totalLuma / 16;
+  for (let i = 0; i < 16; i++) out[i] = luma[i] >= mean ? 1 : 0;
+  return out;
 }
 
 function renderAt(img: Jimp, cols: number, rows: number, noColor: boolean): string[] {
@@ -53,6 +73,7 @@ export async function convertToAscii(
   const lines = renderAt(img, fullCols, fullRows, noColor);
   const playerLines = renderAt(img, playerCols, playerRows, noColor);
   const thumb = renderAt(img, 4, 2, noColor);
+  const padFingerprint = computePadFingerprint(img);
 
   return {
     trackId,
@@ -65,5 +86,6 @@ export async function convertToAscii(
     playerRows,
     cols: vizCols,
     rows: vizRows,
+    padFingerprint,
   };
 }
