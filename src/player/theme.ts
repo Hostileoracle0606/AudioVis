@@ -3,6 +3,7 @@ export interface Theme {
   dim: string;
   border: string;
   accent: string;
+  accentBright: string;
   spectrum: string[];
   meter: string;
   reset: string;
@@ -18,12 +19,19 @@ const PALETTE_MONO    = new Array(16).fill(250);
 
 const PALETTES = [PALETTE_WARM, PALETTE_TEAL, PALETTE_MAGENTA, PALETTE_MONO];
 
+const PALETTE_WARM_BRIGHT    = 220; // bumped from 208
+const PALETTE_TEAL_BRIGHT    = 81;
+const PALETTE_MAGENTA_BRIGHT = 201;
+const PALETTE_MONO_BRIGHT    = 255;
+
+const BRIGHT_ACCENTS = [PALETTE_WARM_BRIGHT, PALETTE_TEAL_BRIGHT, PALETTE_MAGENTA_BRIGHT, PALETTE_MONO_BRIGHT];
+
 export const PALETTE_COUNT = PALETTES.length;
 
 export function buildTheme(paletteIndex: number, noColor: boolean): Theme {
   if (noColor) {
     return {
-      fg: "", dim: "", border: "", accent: "", meter: "", reset: "",
+      fg: "", dim: "", border: "", accent: "", accentBright: "", meter: "", reset: "",
       spectrum: new Array(16).fill(""),
     };
   }
@@ -33,6 +41,7 @@ export function buildTheme(paletteIndex: number, noColor: boolean): Theme {
     dim: FG256(244),
     border: FG256(240),
     accent: FG256(208),
+    accentBright: FG256(BRIGHT_ACCENTS[paletteIndex % PALETTES.length]),
     meter: FG256(palette[8]),
     reset: SGR("0"),
     spectrum: palette.map((n) => FG256(n)),
