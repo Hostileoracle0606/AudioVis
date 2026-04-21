@@ -13,7 +13,12 @@ export async function fetchAlbumArt(
   if (!url) { state.albumArt = null; return; }
   const cacheKey = `${url}::${cellCols}x${cellRows}::${noColor ? "mono" : "color"}`;
   const cached = getCached(cacheKey);
-  if (cached) { state.albumArt = cached; return; }
+  if (cached) {
+    state.albumArt = cached;
+    state.padFingerprints[0] = cached.padFingerprint;
+    state.activePadIndex = 0;
+    return;
+  }
   try {
     const buf = await fetchImageBuffer(url);
     const art = await convertToAscii(buf, cacheKey, cellCols * 2, cellRows * 2, noColor);
